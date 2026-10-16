@@ -3,10 +3,11 @@
 오스키실 1–6번 방 시간표와 실습 재료 10종 × 2세트 대여 현황. 조원은 링크로 보기만, 신청·취소·재료 대여는 조장 코드로 로그인한 조장만.
 
 주소
-- 예약판 (조장 신청): `https://minjoon1218.github.io/osce-board/`
-- 현황판 (누구나 보기, 실시간): `https://minjoon1218.github.io/osce-board/view.html`
+- 예약판 (조장 신청): `https://osce-board.vercel.app/`
+- 현황판 (누구나 보기, 실시간): `https://osce-board.vercel.app/view.html`
 
 Supabase 주소·키는 `config.js` 한 곳에만 있고 두 페이지가 같이 씀.
+배포: Vercel이 `main` 브랜치에 push될 때마다 자동 배포 (GitHub Pages는 사용 안 함).
 
 ## Supabase 세팅 (dw가 할 일)
 1. supabase.com → 프로젝트 열기 (두근두근 치의학부 프로젝트에 같이 넣어도 됨, 테이블 이름 `bookings`·`kits`·`leaders`가 겹치지 않으면 OK)
@@ -45,3 +46,13 @@ delete from bookings where date < current_date - 30;
 
 ## 수정 포인트 (`index.html` 스크립트 맨 위)
 `ROOMS`(방), `KITS`(재료), `DURS`(사용 시간), `OPEN`/`CLOSE`(운영 시간). 재료를 추가하면 `kits` 테이블에도 `id` 두 줄(예: `xray-1`, `xray-2`) 추가.
+
+## 단톡 공지 문구
+```
+📌 오스키실 예약 안내
+현황 보기 (누구나): https://osce-board.vercel.app/view.html
+신청하기 (조장): https://osce-board.vercel.app/
+- 조원은 현황판에서 방·시간·재료 확인
+- 신청·취소·재료 대여는 조장이 받은 코드로 로그인해서
+- 재료 꺼낼 때 '대여', 넣을 때 '반납' 꼭 눌러주세요
+```
