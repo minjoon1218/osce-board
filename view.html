@@ -337,7 +337,7 @@ function dayTitle(){const x=toDate(S.sel),off=Math.round((x-toDate(ymd()))/864e5
   return `${x.getMonth()+1}월 ${x.getDate()}일 (${WD[x.getDay()]})`+(off===0?" · 오늘":off===1?" · 내일":"")}
 function renderNotices(){
   const late=new Date().getHours()>=22;
-  let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">예약은 오늘부터 2일 후까지 · 지금은 <b>${md(lastBookable())}까지</b> 신청 가능 · 매일 밤 10시에 다음 날짜가 열려요${late?"":`<span class="hide-m"> (오늘 밤 10시 ${md(addDays(lastBookable(),1))} 오픈)</span>`}</div></div>`;
+  let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">예약은 오늘부터 2일 후까지 · 조당 하루 2회 · 지금은 <b>${md(lastBookable())}까지</b> 신청 가능 · 매일 밤 10시에 다음 날짜가 열려요${late?"":`<span class="hide-m"> (오늘 밤 10시 ${md(addDays(lastBookable(),1))} 오픈)</span>`}</div></div>`;
   if(S.notice.trim())h=`<div class="ntc admin"><span class="tag">공지</span><div class="body">${esc(S.notice.trim())}</div></div>`+h;
   $("notices").innerHTML=h;
 }

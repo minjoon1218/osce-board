@@ -284,6 +284,7 @@ const DURS=[60,120];
 const OPEN=8*60, CLOSE=22*60;
 const ROLLOVER=22;   /* 매일 밤 10시에 다음 날짜 오픈 */
 const AHEAD=2;       /* 2일 후까지 */
+const DAILY=2;       /* 조당 하루 2회까지 */
 const WD=["일","월","화","수","목","금","토"];
 
 /* ================= 유틸 ================= */
@@ -322,6 +323,7 @@ function dateBookable(d){if(isAdmin())return true;return d>=ymd()&&d<=lastBookab
 function errText(e){
   const m=String(e&&(e.message||e.details||e.code)||"");
   if(m.includes("NOT_LEADER")||m.includes("NOT_ADMIN"))return "코드가 맞지 않아요. 다시 로그인해 주세요.";
+  if(m.includes("DAILY_LIMIT"))return "한 조는 하루 2회까지만 신청할 수 있어요.";
   if(m.includes("TEAM_BUSY"))return "이 조는 이 시간에 이미 다른 방을 신청했어요.";
   if(m.includes("KIT_TAKEN"))return "방금 다른 조가 같은 재료 세트를 잡았어요. 재료를 다시 골라 주세요.";
   if(m.includes("BAD_DURATION"))return "사용 시간은 1시간 또는 2시간만 고를 수 있어요.";
@@ -395,6 +397,7 @@ if(LIVE){
       if(w.role!=="admin"&&b.date>lastBookable())throw new Error("TOO_FAR");
       if(db.rooms[b.room]&&db.rooms[b.room].open===false)throw new Error("ROOM_CLOSED");
       if(db.bookings.some(x=>x.date===b.date&&x.room===b.room&&overlap(x,b)))throw new Error("23P01");
+      if(w.role!=="admin"&&db.bookings.filter(x=>x.date===b.date&&x.team===team).length>=2)throw new Error("DAILY_LIMIT");
       if(db.bookings.some(x=>x.date===b.date&&x.team===team&&overlap(x,b)))throw new Error("TEAM_BUSY");
       const r={...b,team,id:"d"+Date.now()};db.bookings.push(r);save();S.bookings=db.bookings.slice();return r;
     },
@@ -409,6 +412,7 @@ if(LIVE){
 /* ================= 계산 ================= */
 const dayBookings=d=>S.bookings.filter(b=>b.date===d);
 function usedSets(d){const u=new Set();S.bookings.filter(b=>b.date===d.date&&overlap(b,d)).forEach(b=>(b.kits||[]).forEach(k=>u.add(k)));return u}
+const teamCount=(date,team)=>S.bookings.filter(b=>b.date===date&&b.team===team).length;
 const roomTaken=(d,room)=>S.bookings.filter(b=>b.date===d.date&&b.room===room&&overlap(b,d));
 function kitState(kid){
   const k=S.kits[kid];
@@ -440,7 +444,7 @@ function renderAuth(){
 }
 function renderNotices(){
   const last=lastBookable(),late=new Date().getHours()>=ROLLOVER;
-  let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">예약은 <b>오늘부터 2일 후까지</b> 가능해요. 지금은 <b>${md(last)}까지</b> 신청할 수 있고, ${late?`내일 밤 10시에 ${md(nextOpenDate())}이 열려요.`:`오늘 밤 10시에 ${md(nextOpenDate())}이 열려요.`}</div></div>`;
+  let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">예약은 <b>오늘부터 2일 후까지</b>, <b>조당 하루 2회</b>까지 가능해요. 지금은 <b>${md(last)}까지</b> 신청할 수 있고, ${late?`내일 밤 10시에 ${md(nextOpenDate())}이 열려요.`:`오늘 밤 10시에 ${md(nextOpenDate())}이 열려요.`}</div></div>`;
   if(S.notice.trim())h=`<div class="ntc admin"><span class="tag">공지</span><div class="body">${esc(S.notice.trim())}</div></div>`+h;
   $("notices").innerHTML=h;
 }
@@ -504,6 +508,7 @@ $("grid").addEventListener("click",e=>{
   if(!canAct()){toast("신청은 조장만 할 수 있어요");return}
   if(col.classList.contains("closed")){toast("이 방은 지금 사용 불가예요");return}
   if(!dateBookable(S.sel)){toast(S.sel<ymd()?"지난 날짜예요":`${md(lastBookable())}까지만 신청할 수 있어요`);return}
+  if(isLeader()&&teamCount(S.sel,S.team)>=DAILY){toast(`${md(S.sel)}에는 이미 ${DAILY}회 신청했어요`);return}
   const m=slotFrom(e,col),room=Number(col.dataset.room);
   const dur=roomTaken({date:S.sel,start:m,end:m+120},room).length?60:120;
   openForm({room,start:fmt(m),dur});
@@ -641,6 +646,7 @@ function drawForm(){
   const taken=new Set(ROOMS.filter(x=>roomTaken(r,x).length||closedRooms.has(x)));
   const used=usedSets(r),clash=roomTaken(r,d.room),freeAlt=ROOMS.filter(x=>!taken.has(x));
   const teamBusy=d.team&&S.bookings.find(b=>b.date===r.date&&b.team===d.team&&overlap(b,r));
+  const used2=isLeader()&&teamCount(r.date,S.team)>=DAILY;
   const roomClosed=closedRooms.has(d.room);
   const minD=isAdmin()?"":ymd(),maxD=isAdmin()?"":lastBookable();
   $("drawerBody").innerHTML=`
@@ -663,6 +669,7 @@ function drawForm(){
   ${roomClosed?`<div class="alert"><div><b>${d.room}번 방은 지금 사용 불가예요.</b>${roomInfo(d.room).memo?" ("+esc(roomInfo(d.room).memo)+")":""}</div></div>`:""}
   ${!roomClosed&&clash.length?`<div class="alert"><div><b>${d.room}번 방은 이 시간에 이미 신청이 있어요.</b><br>${clash.map(b=>`${esc(teamLabel(b))} ${fmt(b.start)}–${fmt(b.end)}`).join("<br>")}</div></div>`:""}
   ${(roomClosed||clash.length)?(freeAlt.length?`<div class="hint">비어 있는 방: ${freeAlt.map(x=>`<button class="btn sm" type="button" data-room="${x}">${x}번</button>`).join(" ")}</div>`:`<div class="hint">이 시간엔 쓸 수 있는 방이 없어요. 시간을 바꿔 주세요.</div>`):""}
+  ${used2?`<div class="alert"><div><b>${md(r.date)}에는 이미 ${DAILY}회 신청했어요.</b> 한 조는 하루 ${DAILY}회까지만 신청할 수 있어요. 다른 날짜를 골라 주세요.</div></div>`:isLeader()?`<div class="hint">이 날 우리 조 신청 ${teamCount(r.date,S.team)}/${DAILY}회</div>`:""}
   ${teamBusy?`<div class="alert"><div><b>${esc(d.team)}조는 이 시간에 이미 ${teamBusy.room}번 방을 신청했어요.</b> (${fmt(teamBusy.start)}–${fmt(teamBusy.end)})</div></div>`:""}
   <label class="field"><span>연습내용</span><input id="fContent" value="${esc(d.content)}" placeholder="A형 모의고사"></label>
   <div class="field"><span>쓸 재료</span>
@@ -670,7 +677,7 @@ function drawForm(){
       return `<button type="button" class="chip" data-k="${k}" aria-pressed="${d.kits.has(k)}" ${left?"":"disabled title='이 시간대 2세트 모두 예약됨'"}>${n}${left===1?"<small>1세트 남음</small>":""}</button>`}).join("")}</div>
     <span class="hint">남는 세트(1 또는 2)로 자동 배정돼요.</span></div>
   <div class="msg" id="fMsg"></div>
-  <button class="btn primary" type="button" id="fSubmit" ${clash.length||teamBusy||roomClosed?"disabled":""}>${d.room}번 방 · ${fmt(r.start)}–${fmt(r.end)} 신청</button>`;
+  <button class="btn primary" type="button" id="fSubmit" ${clash.length||teamBusy||roomClosed||used2?"disabled":""}>${d.room}번 방 · ${fmt(r.start)}–${fmt(r.end)} 신청</button>`;
   bindForm();
 }
 function readForm(){const d=S.draft;if(isAdmin())d.team=($("fTeam").value||"").trim().replace(/[조팀]$/,"").toUpperCase();d.day=$("fDay").value.trim();d.date=$("fDate").value||d.date;d.start=$("fStart").value||d.start;d.content=$("fContent").value.trim()}
@@ -694,6 +701,7 @@ function setMsg(t,c){const m=$("fMsg");if(m){m.textContent=t;m.className="msg "+
 async function submit(){
   readForm();const d=S.draft,r=draftRange();
   if(isAdmin()&&!d.team){setMsg("어느 조로 신청할지 적어 주세요.","err");$("fTeam").focus();return}
+  if(isLeader()&&teamCount(r.date,S.team)>=DAILY){setMsg(errText(new Error("DAILY_LIMIT")),"err");return}
   if(!dateBookable(r.date)){setMsg(errText(new Error(r.date<ymd()?"PAST":"TOO_FAR")),"err");return}
   if(!isAdmin()&&r.date===ymd()&&r.end<=nowMin()){setMsg("이미 지난 시간은 신청할 수 없어요.","err");return}
   if(r.start<OPEN||r.end>CLOSE){setMsg("08:00–22:00 사이로만 신청할 수 있어요.","err");return}
