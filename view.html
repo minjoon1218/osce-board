@@ -46,6 +46,10 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;paddin
 .wrap{max-width:1280px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
 
 /* header */
+.tabs{display:inline-flex;gap:2px;background:var(--sunk);padding:3px;border-radius:10px;flex:none}
+.tabs a{padding:5px 12px;border-radius:8px;font-size:.84rem;font-weight:600;color:var(--muted);text-decoration:none;white-space:nowrap}
+.tabs a[aria-current="page"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.tabs a:not([aria-current]):hover{color:var(--accent-ink)}
 .top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px 20px;flex-wrap:wrap}
 .title{display:grid;gap:2px;min-width:0}
 .title h1{margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
@@ -130,6 +134,7 @@ h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
 <div class="wrap">
   <header class="top">
     <div class="title">
+      <nav class="tabs" aria-label="페이지" style="justify-self:start;margin-bottom:6px"><a href="index.html">예약</a><a href="view.html" aria-current="page">현황판</a></nav>
       <h1>오스키실 현황판</h1>
       <span class="d" id="dateText"></span>
     </div>

@@ -55,6 +55,10 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .bar-in,.page{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .bar-in{display:flex;align-items:center;gap:10px;padding-block:10px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:9px;margin-right:auto;min-width:0}
+.tabs{display:inline-flex;gap:2px;background:var(--sunk);padding:3px;border-radius:10px;flex:none}
+.tabs a{padding:5px 12px;border-radius:8px;font-size:.84rem;font-weight:600;color:var(--muted);text-decoration:none;white-space:nowrap}
+.tabs a[aria-current="page"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.tabs a:not([aria-current]):hover{color:var(--accent-ink)}
 .logo{width:28px;height:28px;border-radius:8px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-weight:700;font-size:.8rem;font-family:var(--t-mono)}
 .brand h1{font-size:1.06rem;margin:0;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
 .datenav{display:flex;align-items:center;gap:2px;background:var(--sunk);border-radius:10px;padding:3px}
@@ -179,6 +183,7 @@ dl.info dt{color:var(--muted)} dl.info dd{margin:0;min-width:0;overflow-wrap:any
 .codein{font-family:var(--t-mono);font-size:1.3rem;letter-spacing:.2em;text-transform:uppercase;text-align:center;padding:12px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.86rem;font-weight:500;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px)}
 .toast.on{opacity:1;transform:translate(-50%,0)}
+@media (max-width:440px){.brand h1{display:none}}
 @media (max-width:640px){.brand h1{font-size:.98rem}.datelabel{min-width:7.4em}.bar-in{gap:8px}.newlabel{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -187,14 +192,14 @@ dl.info dt{color:var(--muted)} dl.info dd{margin:0;min-width:0;overflow-wrap:any
 
 <header class="bar">
   <div class="bar-in">
-    <div class="brand"><span class="logo" aria-hidden="true">OS</span><h1>오스키실 예약판</h1></div>
+    <div class="brand"><span class="logo" aria-hidden="true">OS</span><h1>오스키실 예약판</h1>
+      <nav class="tabs" aria-label="페이지"><a href="index.html" aria-current="page">예약</a><a href="view.html">현황판</a></nav></div>
     <div class="datenav">
       <button class="iconbtn" id="prev" type="button" aria-label="이전 날">‹</button>
       <div class="datelabel"><span id="dateText"></span><input type="date" id="datePick" aria-label="날짜 선택"></div>
       <button class="iconbtn" id="next" type="button" aria-label="다음 날">›</button>
     </div>
     <button class="btn ghost sm" id="todayBtn" type="button">오늘</button>
-    <a class="btn ghost sm" href="view.html" style="text-decoration:none;color:inherit">현황판</a>
     <button class="iconbtn" id="themeBtn" type="button" aria-label="다크 모드로 바꾸기">☾</button>
     <span id="authSlot"></span>
   </div>
