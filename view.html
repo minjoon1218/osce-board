@@ -121,6 +121,10 @@ h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
 .ntc.admin{background:var(--held-soft);border-color:transparent}
 .ntc.admin .tag{background:var(--held);color:#fff}
 .ntc .body{white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}
+.ntc.block{background:var(--out-soft);border-color:transparent}
+.ntc.block .tag{background:var(--out);color:#fff}
+.bband{position:absolute;top:0;bottom:0;z-index:1;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--out) 16%,transparent) 0 5px,color-mix(in srgb,var(--out) 6%,transparent) 5px 10px);border-left:2px solid var(--out);border-right:2px solid var(--out)}
+.room.blocked{background:repeating-linear-gradient(135deg,var(--out-soft) 0 8px,var(--surface) 8px 16px);border-color:transparent}
 
 /* timeline */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);min-width:0}
@@ -257,7 +261,7 @@ const teamLabel=b=>[b.day,b.team?b.team+"조":""].filter(Boolean).join(" ");
 const palette=t=>{let h=0;for(const c of String(t))h=(h*31+c.charCodeAt(0))>>>0;const i=/^[A-Z]$/.test(t)?(t.charCodeAt(0)-65)%8:h%8;return `--pb:var(--p${i});--pi:var(--p${i}i)`};
 function store(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
 
-const S={bookings:[],kits:{},rooms:{},notice:"",sel:ymd(),lastSync:null};
+const S={bookings:[],kits:{},rooms:{},notice:"",blocks:[],sel:ymd(),lastSync:null};
 const roomInfo=r=>S.rooms[r]||{thomas:true,open:true,memo:""};
 const KITSHORT={anes:"마취",ext:"발치",sut:"봉합",tbi:"TBI",fl:"불소",seal:"실란트",rd:"러버댐",srp:"SRP",ept:"EPT",probe:"치주낭"};
 const kitShort=k=>{const [id,n]=k.split("-");return (KITSHORT[id]||id)+n};
@@ -273,12 +277,14 @@ let load,subscribe;
 if(LIVE){
   const sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
   load=async()=>{
-    const [b,k,rm,st]=await Promise.all([
+    const [b,k,rm,st,bl]=await Promise.all([
       sb.from("bookings").select("*").gte("date",ymd()).lte("date",addDays(ymd(),SPAN_DAYS-1)).order("start_min").limit(5000),
       sb.from("kits").select("*"),
       sb.from("rooms").select("*"),
-      sb.from("settings").select("*").eq("key","notice")
+      sb.from("settings").select("*").eq("key","notice"),
+      sb.from("blocks").select("*").gte("date",ymd()).order("date").order("start_min")
     ]);
+    if(bl&&!bl.error)S.blocks=bl.data.map(x=>({id:x.id,date:x.date,start:x.start_min,end:x.end_min,reason:x.reason||""}));
     if(b.error||k.error)throw (b.error||k.error);
     if(!rm.error)S.rooms=Object.fromEntries(rm.data.map(x=>[x.room,x]));
     if(!st.error)S.notice=(st.data[0]&&st.data[0].value)||"";
@@ -291,6 +297,7 @@ if(LIVE){
       .on("postgres_changes",{event:"*",schema:"public",table:"kits"},refresh)
       .on("postgres_changes",{event:"*",schema:"public",table:"rooms"},refresh)
       .on("postgres_changes",{event:"*",schema:"public",table:"settings"},refresh)
+      .on("postgres_changes",{event:"*",schema:"public",table:"blocks"},refresh)
       .subscribe(st=>{if(st==="SUBSCRIBED")setLive("on");else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT"||st==="CLOSED")setLive("off")});
     document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
     setInterval(refresh,5*60*1000);
@@ -313,7 +320,8 @@ if(LIVE){
     ];
     S.kits={"sut-2":{status:"out",who:"G조"}};
     S.rooms={3:{thomas:false,open:true,memo:""},6:{thomas:false,open:false,memo:"오후 점검"}};
-    S.notice="10/20(월) 오후에는 1–3번 방을 교수님 실습으로 사용합니다.";S.lastSync=new Date()};
+    S.notice="10/20(월) 오후에는 1–3번 방을 교수님 실습으로 사용합니다.";
+    S.blocks=[{id:"k1",date:addDays(t,1),start:780,end:900,reason:"교수님 실습"}];S.lastSync=new Date()};
   subscribe=()=>setLive("demo");
 }
 function setLive(st){$("live").className="live "+(st==="on"?"on":st==="off"?"off":"");
@@ -338,6 +346,8 @@ function dayTitle(){const x=toDate(S.sel),off=Math.round((x-toDate(ymd()))/864e5
 function renderNotices(){
   const late=new Date().getHours()>=22;
   let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">예약은 오늘부터 2일 후까지 · 조당 하루 2회 · 지금은 <b>${md(lastBookable())}까지</b> 신청 가능 · 매일 밤 10시에 다음 날짜가 열려요${late?"":`<span class="hide-m"> (오늘 밤 10시 ${md(addDays(lastBookable(),1))} 오픈)</span>`}</div></div>`;
+  const nm0=nowMin(),ups=S.blocks.filter(k=>k.date>ymd()||(k.date===ymd()&&k.end>nm0)).slice(0,4);
+  if(ups.length)h=`<div class="ntc block"><span class="tag">전체 사용 금지</span><div class="body">${ups.map(k=>`<b>${md(k.date)} ${fmt(k.start)}–${fmt(k.end)}</b>${k.reason?" · "+esc(k.reason):""}`).join("<br>")}</div></div>`+h;
   if(S.notice.trim())h=`<div class="ntc admin"><span class="tag">공지</span><div class="body">${esc(S.notice.trim())}</div></div>`+h;
   $("notices").innerHTML=h;
 }
@@ -351,7 +361,14 @@ function renderRooms(){
   const thomasN=ROOMS.filter(r=>roomInfo(r).thomas).length;
   $("nowSub").textContent=(today?`사용 중 ${busyN} · 비어 있음 ${openRooms.length-busyN}`:(list.length?`신청 ${list.length}건`:"신청 없음"))+(openRooms.length<6?` · 사용 불가 ${6-openRooms.length}`:"")+` · 토마스 ${thomasN}개 방`;
   let h="";
+  const blkNow=today?S.blocks.find(k=>k.date===S.sel&&k.start<=nm&&nm<k.end):null;
+  if(blkNow)$("nowSub").textContent=`전체 사용 금지 ~${fmt(blkNow.end)}${blkNow.reason?" · "+blkNow.reason:""}`;
   for(const r of ROOMS){
+    if(blkNow){h+=`<article class="room blocked">
+        <div class="rh"><span class="rn">${r}번</span><span class="badge closed">사용 금지</span></div>
+        <div class="main closed">~${fmt(blkNow.end)}</div>
+        <div class="sub">${esc(blkNow.reason||"관리자 설정")}</div>
+        ${att(r,[])}</article>`;continue}
     const ri=roomInfo(r),rl=list.filter(b=>b.room===r).sort((a,b)=>a.start-b.start);
     if(!ri.open){
       h+=`<article class="room closed">
@@ -405,6 +422,7 @@ function renderTimeline(){
       h+=`<div class="blk ${past?"past":""}" style="left:calc(${x(b.start)} + 1px);width:calc(${((b.end-b.start)/span*100).toFixed(3)}% - 2px);${palette(b.team)}" title="${esc(teamLabel(b))} ${fmt(b.start)}–${fmt(b.end)} ${esc(b.content)}">
         <b>${esc(b.team)}<span class="dl">조</span></b><span class="t">${fmt(b.start)}–${fmt(b.end)}</span></div>`;
     }
+    for(const k of S.blocks.filter(k=>k.date===S.sel))h+=`<div class="bband" style="left:${x(k.start)};width:${((k.end-k.start)/span*100).toFixed(3)}%" title="전체 사용 금지 ${fmt(k.start)}–${fmt(k.end)} ${esc(k.reason)}"></div>`;
     if(today&&nm>=OPEN&&nm<=CLOSE)h+=`<div class="nowline" style="left:${x(nm)}"></div>`;
     h+=`</div>`;
   });
