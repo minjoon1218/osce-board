@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>오스키실 현황판</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+(function(){var t="light";try{t=localStorage.getItem("osce-theme")||"light"}catch(e){}document.documentElement.setAttribute("data-theme",t)})();
+</script>
+<style>
+/* Layout: 보기 전용 현황판. 상단 시계·실시간 표시 → 6개 방 '지금' 카드 → 오늘 방별 가로 타임라인 → 재료 20세트 현황 */
+:root{
+  color-scheme:light;
+  --bg:#f5f8fa; --surface:#ffffff; --sunk:#f0f4f7; --line:#e6ecf0; --line-strong:#d2dbe1;
+  --fg:#16212a; --muted:#64737f; --faint:#a3b0ba;
+  --accent:#0fa394; --accent-ink:#0b7f74; --accent-soft:#e2f6f3; --on-accent:#ffffff;
+  --out:#e04f3a; --out-soft:#fdebe7; --held:#d48a0b; --held-soft:#fdf3dd; --ok:#22a05a; --ok-soft:#e3f6ea;
+  --shadow:0 1px 2px rgba(22,40,55,.04),0 6px 20px rgba(22,40,55,.06);
+  --p0:#e3f1ff; --p0i:#1f5f9e; --p1:#ffe9e3; --p1i:#a1442d; --p2:#e5f7e8; --p2i:#2b7a3e; --p3:#f3e8ff; --p3i:#6b3fa0;
+  --p4:#fff4d6; --p4i:#8a6200; --p5:#e0f6f6; --p5i:#1d7272; --p6:#ffe6f1; --p6i:#a3326a; --p7:#ebeefe; --p7i:#3d4fa8;
+  --t-sans:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --t-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0e1316; --surface:#151c20; --sunk:#1b2328; --line:#232d33; --line-strong:#34414a;
+  --fg:#e8eef2; --muted:#93a2ad; --faint:#5f6e78;
+  --accent:#3cc7b8; --accent-ink:#7be0d4; --accent-soft:#143532; --on-accent:#05211e;
+  --out:#f08b77; --out-soft:#3b201b; --held:#e8b25a; --held-soft:#352a12; --ok:#6fd096; --ok-soft:#173523;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+  --p0:#17304a; --p0i:#9cc8f2; --p1:#3d241d; --p1i:#f2b19f; --p2:#183522; --p2i:#9fdcae; --p3:#2c2140; --p3i:#cfb2f2;
+  --p4:#3a2f10; --p4i:#ecd08a; --p5:#143535; --p5i:#93dcdc; --p6:#3c1d2c; --p6i:#f2a8cb; --p7:#20264a; --p7i:#b2bdf5;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--t-sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.mono{font-family:var(--t-mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:1280px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+
+/* header */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px 20px;flex-wrap:wrap}
+.title{display:grid;gap:2px;min-width:0}
+.title h1{margin:0;font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
+.title .d{color:var(--muted);font-size:.92rem}
+.right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.clock{font-family:var(--t-mono);font-size:2rem;font-weight:600;letter-spacing:-.03em;line-height:1}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:4px 10px}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.live.on{color:var(--ok)} .live.on i{background:var(--ok);animation:pulse 2s infinite}
+.live.off{color:var(--out)} .live.off i{background:var(--out)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 55%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.seg{display:inline-grid;grid-auto-flow:column;gap:3px;background:var(--sunk);padding:3px;border-radius:10px}
+.seg button{padding:5px 12px;border-radius:8px;font-weight:600;font-size:.86rem;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.iconbtn{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--muted);background:var(--surface);border:1px solid var(--line)}
+.link{font-size:.84rem;color:var(--accent-ink);font-weight:600;text-decoration:none}
+.link:hover{text-decoration:underline}
+.demo{font-size:.84rem;background:var(--held-soft);border-radius:10px;padding:9px 12px}
+
+h2{margin:0 0 10px;font-size:1rem;font-weight:700;display:flex;align-items:baseline;gap:8px}
+h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
+
+/* now cards */
+.rooms{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+@media (max-width:1100px){.rooms{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:560px){.rooms{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.room{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 13px;display:grid;gap:6px;align-content:start;min-height:150px;box-shadow:var(--shadow);min-width:0}
+.room .rh{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.room .rn{font-weight:700;font-size:1.02rem}
+.badge{font-size:.72rem;font-weight:700;border-radius:99px;padding:2px 8px;white-space:nowrap}
+.badge.use{background:var(--out-soft);color:var(--out)}
+.badge.free{background:var(--ok-soft);color:var(--ok)}
+.badge.soon{background:var(--held-soft);color:var(--held)}
+.room.busy{background:var(--pb);border-color:transparent}
+.room.busy .team,.room.busy .what{color:var(--pi)}
+.team{font-size:1.25rem;font-weight:700;letter-spacing:-.01em;line-height:1.2}
+.what{font-size:.86rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.until{font-family:var(--t-mono);font-size:.82rem;color:var(--muted)}
+.bar{height:5px;border-radius:99px;background:color-mix(in srgb,var(--pi,var(--line)) 18%,transparent);overflow:hidden}
+.bar span{display:block;height:100%;background:var(--pi,var(--accent));border-radius:99px}
+.next{font-size:.8rem;color:var(--muted);border-top:1px solid color-mix(in srgb,var(--line-strong) 60%,transparent);padding-top:6px;margin-top:auto}
+.next b{color:var(--fg);font-weight:600}
+.room.busy .next{border-color:color-mix(in srgb,var(--pi) 22%,transparent)}
+.room.busy .next,.room.busy .until{color:color-mix(in srgb,var(--pi) 80%,var(--fg))}
+.emptyroom{font-size:1.1rem;font-weight:600;color:var(--ok)}
+
+/* timeline */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);min-width:0}
+.tl-scroll{overflow-x:auto}
+.tl{display:grid;grid-template-columns:62px minmax(0,1fr);min-width:760px;padding:6px 14px 12px 0}
+.tl .hd{height:28px;position:relative}
+.tl .hd span{position:absolute;top:8px;transform:translateX(-50%);font-family:var(--t-mono);font-size:.7rem;color:var(--faint)}
+.tl .rl{display:flex;align-items:center;justify-content:flex-end;padding-right:10px;font-weight:700;font-size:.84rem;height:44px}
+.track{position:relative;height:44px;border-top:1px solid var(--line);background-image:repeating-linear-gradient(to right,var(--line) 0 1px,transparent 1px calc(100% / 14))}
+.track:last-child{border-bottom:1px solid var(--line)}
+.blk{position:absolute;top:5px;bottom:5px;border-radius:7px;background:var(--pb);color:var(--pi);padding:3px 8px;font-size:.74rem;line-height:1.25;overflow:hidden;white-space:nowrap;display:grid;align-content:center}
+.blk b{font-weight:700;overflow:hidden;text-overflow:ellipsis}
+.blk .t{font-family:var(--t-mono);font-size:.66rem;opacity:.8}
+.blk.past{opacity:.4}
+.nowline{position:absolute;top:0;bottom:0;width:0;border-left:2px solid var(--out);z-index:2;pointer-events:none}
+.tlwrap{position:relative}
+.tl-empty{padding:18px;color:var(--muted);text-align:center;font-size:.9rem}
+
+/* kits */
+.kits{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+@media (max-width:1000px){.kits{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:560px){.kits{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kit{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 11px;display:grid;gap:5px;min-width:0}
+.kit .kn{font-weight:600;font-size:.88rem}
+.ks{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px;align-items:center;font-size:.76rem;min-width:0}
+.ks .s{display:inline-flex;align-items:center;gap:4px;font-weight:700;border-radius:99px;padding:1px 8px 1px 6px;background:var(--ok-soft);color:var(--ok);white-space:nowrap}
+.ks .s i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.ks .s.held{background:var(--held-soft);color:var(--held)}
+.ks .s.out{background:var(--out-soft);color:var(--out)}
+.ks .w{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.foot{font-size:.78rem;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between}
+@media (max-width:560px){.clock{font-size:1.5rem}.title h1{font-size:1.25rem}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="title">
+      <h1>오스키실 현황판</h1>
+      <span class="d" id="dateText"></span>
+    </div>
+    <div class="right">
+      <div class="seg" role="group" aria-label="날짜">
+        <button type="button" id="dToday" aria-pressed="true">오늘</button>
+        <button type="button" id="dTomorrow" aria-pressed="false">내일</button>
+      </div>
+      <span class="live" id="live"><i></i><span id="liveText">연결 중</span></span>
+      <span class="clock" id="clock">--:--</span>
+      <button class="iconbtn" id="themeBtn" type="button" aria-label="다크 모드로 바꾸기">☾</button>
+    </div>
+  </header>
+
+  <div class="demo" id="demo" hidden>미리보기 모드예요. 지금 보이는 신청은 예시예요. config.js에 Supabase 정보가 들어가면 실제 예약이 실시간으로 보여요.</div>
+
+  <section aria-labelledby="nowH">
+    <h2 id="nowH"><span id="nowTitle">지금 방 상황</span> <small id="nowSub"></small></h2>
+    <div class="rooms" id="rooms"></div>
+  </section>
+
+  <section aria-labelledby="tlH">
+    <h2 id="tlH"><span id="tlTitle">오늘 시간표</span> <small id="tlSub"></small></h2>
+    <div class="card"><div class="tl-scroll"><div class="tlwrap" id="tl"></div></div></div>
+  </section>
+
+  <section aria-labelledby="kH">
+    <h2 id="kH">재료 현황 <small>10종 × 2세트 · 지금 기준</small></h2>
+    <div class="kits" id="kits"></div>
+  </section>
+
+  <footer class="foot">
+    <span id="updated">불러오는 중</span>
+    <a class="link" href="index.html">신청하기 (조장) →</a>
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+const ROOMS=[1,2,3,4,5,6];
+const KITS=[["anes","마취 세트"],["ext","발치"],["sut","봉합"],["tbi","TBI"],["fl","불소도포"],["seal","실란트"],["rd","러버댐"],["srp","SRP"],["ept","EPT"],["probe","치주낭 측정"]];
+const SETS=[1,2];
+const OPEN=8*60,CLOSE=22*60;
+const WD=["일","월","화","수","목","금","토"];
+const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,"0");
+const ymd=(d=new Date())=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const addDays=(s,n)=>{const [y,m,d]=s.split("-").map(Number);const x=new Date(y,m-1,d+n);return ymd(x)};
+const fmt=m=>pad(Math.floor(m/60))+":"+pad(m%60);
+const nowMin=()=>{const n=new Date();return n.getHours()*60+n.getMinutes()};
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const teamLabel=b=>[b.day,b.team?b.team+"조":""].filter(Boolean).join(" ");
+const palette=t=>{let h=0;for(const c of String(t))h=(h*31+c.charCodeAt(0))>>>0;const i=/^[A-Z]$/.test(t)?(t.charCodeAt(0)-65)%8:h%8;return `--pb:var(--p${i});--pi:var(--p${i}i)`};
+function store(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
+
+const S={bookings:[],kits:{},offset:0,lastSync:null};
+const selDate=()=>addDays(ymd(),S.offset);
+
+/* ---------- data ---------- */
+const cfg=window.OSCE_CONFIG||{};
+const LIVE=!!(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY&&window.supabase);
+const rowToBooking=r=>({id:r.id,date:r.date,room:r.room,start:r.start_min,end:r.end_min,day:r.day_label||"",team:r.team,content:r.content||"",kits:r.kits||[]});
+let load,subscribe;
+if(LIVE){
+  const sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
+  load=async()=>{
+    const [b,k]=await Promise.all([
+      sb.from("bookings").select("*").gte("date",ymd()).lte("date",addDays(ymd(),1)).order("start_min"),
+      sb.from("kits").select("*")
+    ]);
+    if(b.error||k.error)throw (b.error||k.error);
+    S.bookings=b.data.map(rowToBooking);S.kits=Object.fromEntries(k.data.map(r=>[r.id,r]));S.lastSync=new Date();
+  };
+  subscribe=()=>{
+    let t;const refresh=()=>{clearTimeout(t);t=setTimeout(()=>load().then(render).catch(()=>setLive("off")),150)};
+    sb.channel("osce-view")
+      .on("postgres_changes",{event:"*",schema:"public",table:"bookings"},refresh)
+      .on("postgres_changes",{event:"*",schema:"public",table:"kits"},refresh)
+      .subscribe(st=>{if(st==="SUBSCRIBED")setLive("on");else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT"||st==="CLOSED")setLive("off")});
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
+    setInterval(refresh,5*60*1000); /* 안전망: 5분마다 다시 불러오기 */
+  };
+}else{
+  load=async()=>{const t=ymd(),tm=addDays(t,1),n=nowMin(),r30=m=>Math.max(OPEN,Math.min(CLOSE-120,Math.floor(m/30)*30));
+    const a=r30(n-30);
+    S.bookings=[
+      {id:"e1",date:t,room:1,start:a,end:a+120,day:"3일차",team:"C",content:"A형 모의고사",kits:["anes-1","ext-1"]},
+      {id:"e2",date:t,room:2,start:r30(n-60),end:r30(n-60)+60,day:"3일차",team:"A",content:"봉합·발치 반복",kits:["sut-1"]},
+      {id:"e3",date:t,room:2,start:r30(n+60),end:r30(n+60)+120,day:"3일차",team:"F",content:"SRP·치주낭 측정",kits:["srp-1","probe-1"]},
+      {id:"e4",date:t,room:4,start:r30(n+30),end:r30(n+30)+60,day:"4일차",team:"B",content:"러버댐·실란트",kits:["rd-1","seal-1"]},
+      {id:"e5",date:t,room:5,start:r30(n-30),end:r30(n-30)+120,day:"4일차",team:"D",content:"B형 모의고사",kits:["anes-2","ept-1"]},
+      {id:"e6",date:t,room:6,start:OPEN,end:OPEN+120,day:"3일차",team:"H",content:"TBI 실습",kits:["tbi-1"]},
+      {id:"e7",date:tm,room:3,start:540,end:660,day:"4일차",team:"E",content:"TBI·불소도포",kits:["tbi-1","fl-1"]}
+    ];
+    S.kits={"sut-2":{status:"out",who:"G조"}};S.lastSync=new Date()};
+  subscribe=()=>setLive("demo");
+}
+function setLive(st){const el=$("live");el.className="live "+(st==="on"?"on":st==="off"?"off":"");
+  $("liveText").textContent=st==="on"?"실시간":st==="off"?"연결 끊김 · 자동 재시도":st==="demo"?"미리보기":"연결 중"}
+
+/* ---------- render ---------- */
+function renderHead(){
+  const n=new Date();$("clock").textContent=pad(n.getHours())+":"+pad(n.getMinutes());
+  const [y,m,d]=selDate().split("-").map(Number),x=new Date(y,m-1,d);
+  $("dateText").textContent=`${m}월 ${d}일 (${WD[x.getDay()]})${S.offset?" · 내일":""}`;
+  $("dToday").setAttribute("aria-pressed",S.offset===0);$("dTomorrow").setAttribute("aria-pressed",S.offset===1);
+  $("updated").textContent=S.lastSync?`마지막 갱신 ${pad(S.lastSync.getHours())}:${pad(S.lastSync.getMinutes())}:${pad(S.lastSync.getSeconds())} · 신청이 바뀌면 자동으로 새로 고쳐져요`:"불러오는 중";
+}
+function renderRooms(){
+  const today=S.offset===0,d=selDate(),nm=today?nowMin():-1,list=S.bookings.filter(b=>b.date===d);
+  $("nowTitle").textContent=today?"지금 방 상황":"내일 방별 예약";
+  const busyN=today?ROOMS.filter(r=>list.some(b=>b.room===r&&b.start<=nm&&nm<b.end)).length:0;
+  $("nowSub").textContent=today?`사용 중 ${busyN} · 비어 있음 ${6-busyN}`:`신청 ${list.length}건`;
+  let h="";
+  for(const r of ROOMS){
+    const rl=list.filter(b=>b.room===r).sort((a,b)=>a.start-b.start);
+    const cur=today?rl.find(b=>b.start<=nm&&nm<b.end):null;
+    const upcoming=rl.filter(b=>b.start>nm);
+    const nx=upcoming[0];
+    if(cur){
+      const pct=Math.round((nm-cur.start)/(cur.end-cur.start)*100);
+      h+=`<article class="room busy" style="${palette(cur.team)}">
+        <div class="rh"><span class="rn">${r}번 방</span><span class="badge use">사용 중</span></div>
+        <div class="team">${esc(teamLabel(cur))}</div>
+        <div class="what">${esc(cur.content||"연습")}</div>
+        <div class="until">~${fmt(cur.end)} · ${cur.end-nm}분 남음</div>
+        <div class="bar"><span style="width:${pct}%"></span></div>
+        <div class="next">${nx?`다음 <b>${fmt(nx.start)}</b> ${esc(teamLabel(nx))}`:"이후 예약 없음"}</div></article>`;
+    }else if(today){
+      const soon=nx&&nx.start-nm<=30;
+      h+=`<article class="room">
+        <div class="rh"><span class="rn">${r}번 방</span><span class="badge ${soon?"soon":"free"}">${soon?"곧 사용":"비어 있음"}</span></div>
+        <div class="emptyroom">${nx?`${fmt(nx.start)}까지 비어 있음`:"오늘 남은 예약 없음"}</div>
+        ${nx?`<div class="what">다음: ${esc(teamLabel(nx))} · ${esc(nx.content||"연습")}</div>`:""}
+        ${upcoming.length>1?`<div class="next">이후 ${upcoming.slice(1,3).map(b=>`<b>${fmt(b.start)}</b> ${esc(b.team)}조`).join(" · ")}${upcoming.length>3?" …":""}</div>`:""}
+      </article>`;
+    }else{
+      h+=`<article class="room">
+        <div class="rh"><span class="rn">${r}번 방</span><span class="badge ${rl.length?"soon":"free"}">${rl.length?rl.length+"건":"비어 있음"}</span></div>
+        ${rl.length?rl.slice(0,4).map(b=>`<div class="what" style="color:var(--fg)"><span class="mono">${fmt(b.start)}–${fmt(b.end)}</span> ${esc(b.team)}조</div>`).join(""):`<div class="emptyroom">예약 없음</div>`}
+      </article>`;
+    }
+  }
+  $("rooms").innerHTML=h;
+}
+function renderTimeline(){
+  const today=S.offset===0,d=selDate(),nm=nowMin(),list=S.bookings.filter(b=>b.date===d),span=CLOSE-OPEN;
+  $("tlTitle").textContent=today?"오늘 시간표":"내일 시간표";
+  $("tlSub").textContent=list.length?`${list.length}건`:"";
+  const x=m=>((m-OPEN)/span*100).toFixed(3)+"%";
+  let h=`<div class="tl"><div></div><div class="hd">${Array.from({length:15},(_,i)=>`<span style="left:${(i/14*100).toFixed(3)}%">${pad(8+i)}</span>`).join("")}</div>`;
+  for(const r of ROOMS){
+    h+=`<div class="rl">${r}번</div><div class="track">`;
+    for(const b of list.filter(b=>b.room===r)){
+      const past=today&&b.end<=nm;
+      h+=`<div class="blk ${past?"past":""}" style="left:calc(${x(b.start)} + 2px);width:calc(${((b.end-b.start)/span*100).toFixed(3)}% - 4px);${palette(b.team)}" title="${esc(teamLabel(b))} ${fmt(b.start)}–${fmt(b.end)} ${esc(b.content)}">
+        <b>${esc(teamLabel(b))}</b><span class="t">${fmt(b.start)}–${fmt(b.end)}</span></div>`;
+    }
+    if(today&&nm>=OPEN&&nm<=CLOSE)h+=`<div class="nowline" style="left:${x(nm)}"></div>`;
+    h+=`</div>`;
+  }
+  h+=`</div>`;
+  $("tl").innerHTML=list.length||today?h:`<div class="tl-empty">내일은 아직 신청이 없어요.</div>`;
+}
+function kitState(id){
+  const k=S.kits[id];
+  if(k&&k.status==="out")return {cls:"out",t:"대여중",w:k.who||""};
+  const t=ymd(),nm=nowMin(),l=S.bookings.filter(b=>b.date===t&&(b.kits||[]).includes(id));
+  const cur=l.find(b=>b.start<=nm&&nm<b.end);
+  if(cur)return {cls:"held",t:"예약",w:`${cur.team}조 · ${cur.room}번 ~${fmt(cur.end)}`};
+  const nx=l.filter(b=>b.start>nm).sort((a,b)=>a.start-b.start)[0];
+  return {cls:"",t:"보관",w:nx?`${fmt(nx.start)} ${nx.team}조`:""};
+}
+function renderKits(){
+  $("kits").innerHTML=KITS.map(([k,n])=>`<div class="kit"><span class="kn">${n}</span>${SETS.map(s=>{const st=kitState(k+"-"+s);
+    return `<div class="ks"><span class="s ${st.cls}"><i></i>${s} ${st.t}</span><span class="w" title="${esc(st.w)}">${esc(st.w)}</span></div>`}).join("")}</div>`).join("");
+}
+function render(){renderHead();renderRooms();renderTimeline();renderKits()}
+
+/* ---------- controls ---------- */
+$("dToday").onclick=()=>{S.offset=0;render()};
+$("dTomorrow").onclick=()=>{S.offset=1;render()};
+function syncTheme(){const dk=document.documentElement.getAttribute("data-theme")==="dark";$("themeBtn").textContent=dk?"☀":"☾";$("themeBtn").setAttribute("aria-label",dk?"밝은 모드로 바꾸기":"다크 모드로 바꾸기")}
+$("themeBtn").onclick=()=>{const n=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",n);store("osce-theme",n);syncTheme()};
+
+/* ---------- boot ---------- */
+(async()=>{
+  if(!document.documentElement.getAttribute("data-theme"))document.documentElement.setAttribute("data-theme",store("osce-theme")||"light");
+  syncTheme();
+  if(!LIVE)$("demo").hidden=false;
+  render();
+  try{await load()}catch(e){setLive("off")}
+  render();subscribe();
+  let lastDay=ymd();
+  setInterval(async()=>{ if(ymd()!==lastDay){lastDay=ymd();try{await load()}catch(e){}} render() },30000);
+})();
+})();
+</script>
+</body>
+</html>
