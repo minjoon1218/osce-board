@@ -25,7 +25,7 @@
   --p4:#fff4d6; --p4i:#8a6200; --p5:#e0f6f6; --p5i:#1d7272; --p6:#ffe6f1; --p6i:#a3326a; --p7:#ebeefe; --p7i:#3d4fa8;
   --t-sans:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
   --t-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
-  --room-h:136px; --track-h:44px; --label-w:56px;
+  --room-h:166px; --track-h:44px; --label-w:56px;
 }
 :root[data-theme="dark"]{
   color-scheme:dark;
@@ -105,6 +105,22 @@ h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
 .slots{display:grid;gap:1px;font-size:.8rem;margin-top:2px}
 .slots div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .foot-line.m-more{display:none}
+.att{display:flex;gap:3px;flex-wrap:wrap;overflow:hidden;margin-top:4px;min-width:0;max-height:2.6em;align-content:flex-start}
+.bar+.att,.bar+.foot-line+.att{margin-top:5px}
+.chipx{flex:none;font-size:.66rem;font-weight:700;border-radius:5px;padding:0 5px;line-height:1.55;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.chipx.th-on{background:var(--ok-soft);color:var(--ok)}
+.chipx.th-off{color:var(--faint);text-decoration:line-through}
+.room.busy .chipx.kt{background:color-mix(in srgb,var(--surface) 65%,transparent);color:var(--pi)}
+.room.closed{background:repeating-linear-gradient(135deg,var(--surface) 0 8px,var(--sunk) 8px 9px)}
+.badge.closed{background:var(--out-soft);color:var(--out)}
+.main.closed{color:var(--out);font-size:1rem}
+.notices{display:grid;gap:8px}
+.ntc{display:flex;align-items:flex-start;gap:10px;border-radius:10px;padding:9px 12px;font-size:.86rem;background:var(--surface);border:1px solid var(--line)}
+.ntc .tag{flex:none;font-size:.7rem;font-weight:700;border-radius:99px;padding:1px 8px;margin-top:2px}
+.ntc.rule .tag{background:var(--accent-soft);color:var(--accent-ink)}
+.ntc.admin{background:var(--held-soft);border-color:transparent}
+.ntc.admin .tag{background:var(--held);color:#fff}
+.ntc .body{white-space:pre-wrap;overflow-wrap:anywhere;min-width:0}
 
 /* timeline */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);min-width:0}
@@ -137,7 +153,7 @@ h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
 
 /* ---------- 모바일: 한 화면 위주로 압축 ---------- */
 @media (max-width:600px){
-  :root{--room-h:78px;--track-h:30px;--label-w:30px}
+  :root{--room-h:116px;--track-h:30px;--label-w:30px}
   body{font-size:14px}
   .wrap{gap:12px;padding-block:12px 32px}
   h1{display:none}
@@ -159,6 +175,9 @@ h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
   .foot-line.m-more{display:block;margin-top:0;font-size:.66rem}
   .slots{font-size:.72rem}
   .slots .more{display:none}
+  .chipx{font-size:.58rem;padding:0 4px}
+  .ntc{font-size:.78rem;padding:7px 10px;gap:8px}
+  .att{margin-top:auto}
   .bar{height:3px}
   .tl{min-width:0;padding:2px 8px 8px 0}
   .tl .hd span{font-size:.6rem}
@@ -192,6 +211,7 @@ h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
   </header>
 
   <div class="demo" id="demo" hidden>미리보기 모드예요. 지금 보이는 신청은 예시예요. config.js에 Supabase 정보가 들어가면 실제 예약이 실시간으로 보여요.</div>
+  <div class="notices" id="notices"></div>
 
   <nav class="days" id="days" aria-label="날짜 선택 (4주)"></nav>
 
@@ -237,7 +257,12 @@ const teamLabel=b=>[b.day,b.team?b.team+"조":""].filter(Boolean).join(" ");
 const palette=t=>{let h=0;for(const c of String(t))h=(h*31+c.charCodeAt(0))>>>0;const i=/^[A-Z]$/.test(t)?(t.charCodeAt(0)-65)%8:h%8;return `--pb:var(--p${i});--pi:var(--p${i}i)`};
 function store(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
 
-const S={bookings:[],kits:{},sel:ymd(),lastSync:null};
+const S={bookings:[],kits:{},rooms:{},notice:"",sel:ymd(),lastSync:null};
+const roomInfo=r=>S.rooms[r]||{thomas:true,open:true,memo:""};
+const KITSHORT={anes:"마취",ext:"발치",sut:"봉합",tbi:"TBI",fl:"불소",seal:"실란트",rd:"러버댐",srp:"SRP",ept:"EPT",probe:"치주낭"};
+const kitShort=k=>{const [id,n]=k.split("-");return (KITSHORT[id]||id)+n};
+function lastBookable(){const n=new Date();return addDays(ymd(n),2+(n.getHours()>=22?1:0))}
+const md=s=>{const d=toDate(s);return `${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`};
 const isToday=()=>S.sel===ymd();
 
 /* ---------- data ---------- */
@@ -248,11 +273,15 @@ let load,subscribe;
 if(LIVE){
   const sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
   load=async()=>{
-    const [b,k]=await Promise.all([
+    const [b,k,rm,st]=await Promise.all([
       sb.from("bookings").select("*").gte("date",ymd()).lte("date",addDays(ymd(),SPAN_DAYS-1)).order("start_min").limit(5000),
-      sb.from("kits").select("*")
+      sb.from("kits").select("*"),
+      sb.from("rooms").select("*"),
+      sb.from("settings").select("*").eq("key","notice")
     ]);
     if(b.error||k.error)throw (b.error||k.error);
+    if(!rm.error)S.rooms=Object.fromEntries(rm.data.map(x=>[x.room,x]));
+    if(!st.error)S.notice=(st.data[0]&&st.data[0].value)||"";
     S.bookings=b.data.map(rowToBooking);S.kits=Object.fromEntries(k.data.map(r=>[r.id,r]));S.lastSync=new Date();
   };
   subscribe=()=>{
@@ -260,6 +289,8 @@ if(LIVE){
     sb.channel("osce-view")
       .on("postgres_changes",{event:"*",schema:"public",table:"bookings"},refresh)
       .on("postgres_changes",{event:"*",schema:"public",table:"kits"},refresh)
+      .on("postgres_changes",{event:"*",schema:"public",table:"rooms"},refresh)
+      .on("postgres_changes",{event:"*",schema:"public",table:"settings"},refresh)
       .subscribe(st=>{if(st==="SUBSCRIBED")setLive("on");else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT"||st==="CLOSED")setLive("off")});
     document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
     setInterval(refresh,5*60*1000);
@@ -280,7 +311,9 @@ if(LIVE){
       bk("e10",addDays(t,3),5,840,60,"5일차","B","EPT",["ept-1"]),
       bk("e11",addDays(t,6),4,540,120,"6일차","A","발치·봉합",["ext-1","sut-1"])
     ];
-    S.kits={"sut-2":{status:"out",who:"G조"}};S.lastSync=new Date()};
+    S.kits={"sut-2":{status:"out",who:"G조"}};
+    S.rooms={3:{thomas:false,open:true,memo:""},6:{thomas:false,open:false,memo:"오후 점검"}};
+    S.notice="10/20(월) 오후에는 1–3번 방을 교수님 실습으로 사용합니다.";S.lastSync=new Date()};
   subscribe=()=>setLive("demo");
 }
 function setLive(st){$("live").className="live "+(st==="on"?"on":st==="off"?"off":"");
@@ -302,14 +335,32 @@ function renderDays(){
 }
 function dayTitle(){const x=toDate(S.sel),off=Math.round((x-toDate(ymd()))/864e5);
   return `${x.getMonth()+1}월 ${x.getDate()}일 (${WD[x.getDay()]})`+(off===0?" · 오늘":off===1?" · 내일":"")}
+function renderNotices(){
+  const late=new Date().getHours()>=22;
+  let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">예약은 오늘부터 2일 후까지 · 지금은 <b>${md(lastBookable())}까지</b> 신청 가능 · 매일 밤 10시에 다음 날짜가 열려요${late?"":`<span class="hide-m"> (오늘 밤 10시 ${md(addDays(lastBookable(),1))} 오픈)</span>`}</div></div>`;
+  if(S.notice.trim())h=`<div class="ntc admin"><span class="tag">공지</span><div class="body">${esc(S.notice.trim())}</div></div>`+h;
+  $("notices").innerHTML=h;
+}
+function att(r,kits){const ri=roomInfo(r);
+  return `<div class="att"><span class="chipx ${ri.thomas?"th-on":"th-off"}" title="토마스 ${ri.thomas?"있음":"없음"}">토마스</span>${(kits||[]).map(k=>`<span class="chipx kt">${esc(kitShort(k))}</span>`).join("")}</div>`}
 function renderRooms(){
   const today=isToday(),list=S.bookings.filter(b=>b.date===S.sel),nm=today?nowMin():-1;
   $("nowTitle").textContent=today?"지금 방 상황":dayTitle();
-  const busyN=today?ROOMS.filter(r=>list.some(b=>b.room===r&&b.start<=nm&&nm<b.end)).length:0;
-  $("nowSub").textContent=today?`사용 중 ${busyN} · 비어 있음 ${6-busyN}`:(list.length?`신청 ${list.length}건`:"신청 없음");
+  const openRooms=ROOMS.filter(r=>roomInfo(r).open);
+  const busyN=today?openRooms.filter(r=>list.some(b=>b.room===r&&b.start<=nm&&nm<b.end)).length:0;
+  const thomasN=ROOMS.filter(r=>roomInfo(r).thomas).length;
+  $("nowSub").textContent=(today?`사용 중 ${busyN} · 비어 있음 ${openRooms.length-busyN}`:(list.length?`신청 ${list.length}건`:"신청 없음"))+(openRooms.length<6?` · 사용 불가 ${6-openRooms.length}`:"")+` · 토마스 ${thomasN}개 방`;
   let h="";
   for(const r of ROOMS){
-    const rl=list.filter(b=>b.room===r).sort((a,b)=>a.start-b.start);
+    const ri=roomInfo(r),rl=list.filter(b=>b.room===r).sort((a,b)=>a.start-b.start);
+    if(!ri.open){
+      h+=`<article class="room closed">
+        <div class="rh"><span class="rn">${r}번</span><span class="badge closed">사용 불가</span></div>
+        <div class="main closed">사용 불가</div>
+        <div class="sub">${esc(ri.memo||"관리자 설정")}</div>
+        ${att(r,[])}</article>`;
+      continue;
+    }
     if(today){
       const cur=rl.find(b=>b.start<=nm&&nm<b.end),up=rl.filter(b=>b.start>nm),nx=up[0];
       if(cur){
@@ -320,22 +371,23 @@ function renderRooms(){
           <div class="sub"><span class="mono">~${fmt(cur.end)}</span> · ${cur.end-nm}분<span class="hide-m"> 남음</span></div>
           <div class="sub hide-m">${esc(cur.content||"연습")}</div>
           <div class="bar"><span style="width:${pct}%"></span></div>
-          <div class="foot-line">${nx?`다음 <b>${fmt(nx.start)}</b> ${esc(nx.team)}조`:"이후 예약 없음"}</div></article>`;
+          <div class="foot-line">${nx?`다음 <b>${fmt(nx.start)}</b> ${esc(nx.team)}조`:"이후 예약 없음"}</div>
+          ${att(r,cur.kits)}</article>`;
       }else{
         const soon=nx&&nx.start-nm<=30;
         h+=`<article class="room">
           <div class="rh"><span class="rn">${r}번</span><span class="badge ${soon?"soon":"free"}">${soon?"곧 사용":"비어 있음"}</span></div>
           <div class="main free">${nx?`~${fmt(nx.start)} 빈방`:"오늘 비어 있음"}</div>
           ${nx?`<div class="sub">다음 <span class="mono">${fmt(nx.start)}</span> ${esc(nx.team)}조</div>`:`<div class="sub">&nbsp;</div>`}
-          <div class="foot-line">${up.length>1?`이후 ${up.slice(1,3).map(b=>`<b>${fmt(b.start)}</b> ${esc(b.team)}조`).join(" · ")}`:"&nbsp;"}</div>
-        </article>`;
+          <div class="foot-line">${up.length>1?`이후 ${up.slice(1,3).map(b=>`<b>${fmt(b.start)}</b> ${esc(b.team)}조`).join(" · ")}`:(ri.memo?esc(ri.memo):"&nbsp;")}</div>
+          ${att(r,soon?nx.kits:[])}</article>`;
       }
     }else{
       const maxM=2;
       h+=`<article class="room">
         <div class="rh"><span class="rn">${r}번</span><span class="badge ${rl.length?"cnt":"free"}">${rl.length?rl.length+"건":"비어 있음"}</span></div>
-        ${rl.length?`<div class="slots">${rl.slice(0,4).map((b,i)=>`<div class="${i>=maxM?"more":""}"><span class="mono">${fmt(b.start)}</span> ${esc(b.team)}조</div>`).join("")}</div>${rl.length>maxM?`<div class="foot-line m-more">외 ${rl.length-maxM}건 · 아래 시간표 참고</div>`:""}`:`<div class="main free">예약 없음</div>`}
-      </article>`;
+        ${rl.length?`<div class="slots">${rl.slice(0,4).map((b,i)=>`<div class="${i>=maxM?"more":""}"><span class="mono">${fmt(b.start)}</span> ${esc(b.team)}조<span class="hide-m">${(b.kits||[]).length?" · "+b.kits.map(kitShort).join(" "):""}</span></div>`).join("")}</div>${rl.length>maxM?`<div class="foot-line m-more">외 ${rl.length-maxM}건</div>`:""}`:`<div class="main free">예약 없음</div>`}
+        ${att(r,[])}</article>`;
     }
   }
   $("rooms").innerHTML=h;
@@ -371,7 +423,7 @@ function renderKits(){
   $("kits").innerHTML=KITS.map(([k,n])=>`<div class="kit"><span class="kn">${n}</span><div class="sets">${SETS.map(s=>{const st=kitState(k+"-"+s);
     return `<div class="ks"><span class="s ${st.cls}" title="${s}세트 ${st.t} ${esc(st.w)}"><i></i>${s} ${st.t}</span><span class="w">${esc(st.w)}</span></div>`}).join("")}</div></div>`).join("");
 }
-function render(){renderHead();renderDays();renderRooms();renderTimeline();renderKits()}
+function render(){renderHead();renderNotices();renderDays();renderRooms();renderTimeline();renderKits()}
 
 /* ---------- controls ---------- */
 $("days").addEventListener("click",e=>{const b=e.target.closest("[data-date]");if(!b)return;S.sel=b.dataset.date;render();
