@@ -189,6 +189,15 @@ dl.info dt{color:var(--muted)} dl.info dd{margin:0;min-width:0;overflow-wrap:any
 .toast.on{opacity:1;transform:translate(-50%,0)}
 
 /* ---- notices / admin / rooms ---- */
+.ntc.using{background:var(--accent-soft);border-color:transparent;align-items:center}
+.ntc.using .tag{background:var(--accent);color:var(--on-accent)}
+.ntc.using .body{flex:1}
+.adj{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;align-items:stretch}
+.adj .lbl{font-size:.78rem;font-weight:600;color:var(--muted);align-self:center;padding-right:4px}
+.adj button{display:grid;gap:1px;justify-items:center;padding:7px 6px}
+.adj button small{font-size:.7rem;font-weight:500;color:var(--muted);font-family:var(--t-mono)}
+.adj button:disabled small{font-family:var(--t-sans)}
+.adj button.ext:not(:disabled){border-color:var(--accent);color:var(--accent-ink)}
 .blockband{position:absolute;left:0;right:0;z-index:2;background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--out) 14%,transparent) 0 6px,color-mix(in srgb,var(--out) 6%,transparent) 6px 12px);border-top:2px solid var(--out);border-bottom:2px solid var(--out);pointer-events:none}
 .blockband span{position:absolute;top:4px;left:4px;right:4px;font-size:.7rem;font-weight:700;color:var(--out);background:var(--surface);border-radius:6px;padding:2px 5px;text-align:center;overflow-wrap:anywhere}
 .ntc.block{background:var(--out-soft);border-color:transparent}
@@ -294,6 +303,7 @@ const OPEN=8*60, CLOSE=22*60;
 const ROLLOVER=22;   /* 매일 밤 10시에 다음 날짜 오픈 */
 const AHEAD=2;       /* 2일 후까지 */
 const DAILY=2;       /* 조당 하루 2회까지 */
+const MAXLEN=180;    /* 연장 포함 한 번 사용 최대 3시간 */
 const WD=["일","월","화","수","목","금","토"];
 
 /* ================= 유틸 ================= */
@@ -332,6 +342,12 @@ function dateBookable(d){if(isAdmin())return true;return d>=ymd()&&d<=lastBookab
 function errText(e){
   const m=String(e&&(e.message||e.details||e.code)||"");
   if(m.includes("NOT_LEADER")||m.includes("NOT_ADMIN"))return "코드가 맞지 않아요. 다시 로그인해 주세요.";
+  if(m.includes("NOT_IN_USE"))return "지금 사용 중인 신청만 조정할 수 있어요.";
+  if(m.includes("TOO_SHORT"))return "더 줄일 수 없어요. 이미 지난 시간이거나 시작 시간보다 빨라져요.";
+  if(m.includes("CLOSE_TIME"))return "22:00 이후로는 연장할 수 없어요.";
+  if(m.includes("TOO_LONG"))return "한 번 사용은 연장 포함 최대 3시간이에요.";
+  if(m.includes("NOT_YOURS"))return "우리 조 신청만 조정할 수 있어요.";
+  if(m.includes("NOT_FOUND"))return "신청을 찾지 못했어요. 새로고침해 주세요.";
   if(m.includes("BLOCKED"))return "이 방·시간은 관리자가 사용 금지로 정해 뒀어요.";
   if(m.includes("NO_ROOMS"))return "사용 금지할 방을 하나 이상 골라 주세요.";
   if(m.includes("BAD_RANGE"))return "시작이 끝보다 빨라야 하고, 08:00–22:00 안이어야 해요.";
@@ -370,6 +386,7 @@ if(LIVE){
       if(!s.error)S.notice=(s.data[0]&&s.data[0].value)||"";
     },
     async add(b){return rowToBooking(await rpc("create_booking",{p_code:S.code,p_date:b.date,p_room:b.room,p_start:b.start,p_dur:b.end-b.start,p_day:b.day,p_content:b.content,p_kits:b.kits,p_team:b.team||null}))},
+    async adjust(id,delta){return rowToBooking(await rpc("adjust_booking",{p_code:S.code,p_id:id,p_delta:delta}))},
     async cancel(id){const ok=await rpc("cancel_booking",{p_code:S.code,p_id:id});if(!ok)throw new Error("우리 조 신청만 취소할 수 있어요.")},
     async setKit(id,status,who){await rpc("set_kit",{p_code:S.code,p_id:id,p_status:status,p_who:who||""})},
     async setNotice(t){await rpc("admin_set_notice",{p_code:S.code,p_text:t})},
@@ -385,9 +402,9 @@ if(LIVE){
     }
   };
 }else{
-  const KEY="osce-demo-v6";
+  const KEY="osce-demo-v7";
   const seed=()=>{const t=ymd(),tm=addDays(t,1);return {bookings:[
-    {id:"e1",date:t,room:1,start:540,end:660,day:"3일차",team:"C",content:"A형 모의고사",kits:["anes-1","ext-1"]},
+    (()=>{const n=new Date(),s=Math.max(480,Math.min(1200,Math.floor((n.getHours()*60+n.getMinutes())/30)*30-30));return {id:"e1",date:t,room:1,start:s,end:s+120,day:"3일차",team:"C",content:"A형 모의고사",kits:["anes-1","ext-1"]}})(),
     {id:"e2",date:t,room:2,start:600,end:720,day:"3일차",team:"A",content:"봉합·발치 반복",kits:["sut-1","ext-2"]},
     {id:"e3",date:t,room:1,start:780,end:840,day:"3일차",team:"F",content:"치주낭 측정",kits:["probe-1","anes-1"]},
     {id:"e4",date:t,room:4,start:840,end:960,day:"4일차",team:"B",content:"러버댐·실란트",kits:["rd-1","seal-1"]},
@@ -418,6 +435,8 @@ if(LIVE){
       if(db.bookings.some(x=>x.date===b.date&&x.team===team&&overlap(x,b)))throw new Error("TEAM_BUSY");
       const r={...b,team,id:"d"+Date.now()};db.bookings.push(r);save();S.bookings=db.bookings.slice();return r;
     },
+    async adjust(id,delta){const b=db.bookings.find(x=>x.id===id);if(!b)throw new Error("NOT_FOUND");
+      const why=adjCheck(b,delta,true);if(why)throw new Error(why);b.end+=delta;save();S.bookings=db.bookings.slice();return b},
     async cancel(id){const b=db.bookings.find(x=>x.id===id);if(!b||(!isAdmin()&&b.team!==S.team))throw new Error("우리 조 신청만 취소할 수 있어요.");db.bookings=db.bookings.filter(x=>x.id!==id);save();S.bookings=db.bookings.slice()},
     async setKit(id,status,w){db.kits[id]={status,who:status==="out"?(w||(isAdmin()?"관리자":S.team+"조")):""};save();S.kits={...db.kits}},
     async setNotice(t){db.notice=t;save();S.notice=t},
@@ -435,6 +454,27 @@ const dayBookings=d=>S.bookings.filter(b=>b.date===d);
 function usedSets(d){const u=new Set();S.bookings.filter(b=>b.date===d.date&&overlap(b,d)).forEach(b=>(b.kits||[]).forEach(k=>u.add(k)));return u}
 const blockAt=(d,room)=>S.blocks.find(k=>k.date===d.date&&overlap(k,d)&&(room==null||(k.rooms||ROOMS).includes(room)));
 const roomsLabel=rs=>!rs||rs.length>=ROOMS.length?"전체 방":rs.join("·")+"번 방";
+function inUseNow(b){const nm=nowMin();return b.date===ymd()&&b.start<=nm&&nm<b.end}
+/* 조기 퇴실/연장 가능 여부: 안 되면 오류 코드, 되면 "" */
+function adjCheck(b,delta,code){
+  const ne=b.end+delta,nm=nowMin(),adm=isAdmin();
+  const R=(c,t)=>code?c:t;
+  if(!adm&&!inUseNow(b))return R("NOT_IN_USE","사용 중 아님");
+  if(delta<0){
+    if(ne<=b.start)return R("TOO_SHORT","시작 전으로 못 줄여요");
+    if(!adm&&b.date===ymd()&&ne<=nm)return R("TOO_SHORT","이미 지난 시간");
+    return "";
+  }
+  const add={date:b.date,start:b.end,end:ne};
+  if(ne>CLOSE)return R("CLOSE_TIME","22시 마감");
+  if(ne-b.start>MAXLEN)return R("TOO_LONG","최대 3시간");
+  if(S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&o.room===b.room&&overlap(o,add)))return R("23P01","다음 신청 있음");
+  if(S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&o.team===b.team&&overlap(o,add)))return R("TEAM_BUSY","조 일정 겹침");
+  if((b.kits||[]).length&&S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&(o.kits||[]).some(k=>b.kits.includes(k))&&overlap(o,add)))return R("KIT_TAKEN","재료 겹침");
+  if(!adm&&blockAt(add,b.room))return R("BLOCKED","사용 금지 시간");
+  if(!adm&&!roomInfo(b.room).open)return R("ROOM_CLOSED","방 사용 불가");
+  return "";
+}
 const teamCount=(date,team)=>S.bookings.filter(b=>b.date===date&&b.team===team).length;
 const roomTaken=(d,room)=>S.bookings.filter(b=>b.date===d.date&&b.room===room&&overlap(b,d));
 function kitState(kid){
@@ -471,6 +511,8 @@ function renderNotices(){
   const ups=S.blocks.filter(k=>k.date>ymd()||(k.date===ymd()&&k.end>nowMin())).sort((a,b)=>a.date.localeCompare(b.date)||a.start-b.start).slice(0,4);
   if(ups.length)h=`<div class="ntc block"><span class="tag">사용 금지</span><div class="body">${ups.map(k=>`<b>${md(k.date)} ${fmt(k.start)}–${fmt(k.end)} · ${roomsLabel(k.rooms)}</b>${k.reason?" · "+esc(k.reason):""}`).join("<br>")}</div></div>`+h;
   if(S.notice.trim())h=`<div class="ntc admin"><span class="tag">공지</span><div class="body">${esc(S.notice.trim())}</div></div>`+h;
+  const cur=isLeader()&&S.bookings.find(b=>b.team===S.team&&inUseNow(b));
+  if(cur)h=`<div class="ntc using"><span class="tag">사용 중</span><div class="body"><b>${cur.room}번 방 ~${fmt(cur.end)}</b> · ${cur.end-nowMin()}분 남음</div><button class="btn sm" type="button" data-adjopen="${cur.id}">연장·조기 퇴실</button></div>`+h;
   $("notices").innerHTML=h;
 }
 function renderTop(){
@@ -619,7 +661,7 @@ function openAccount(){
   openDrawer(S.team+"조 조장");
   $("drawerBody").innerHTML=`
     <div class="field"><span>우리 조 다가오는 신청</span>
-    ${mine.length?mine.map(b=>`<button class="btn" type="button" data-open="${b.id}" style="text-align:left">${md(b.date)} <span class="mono">${fmt(b.start)}–${fmt(b.end)}</span> · ${b.room}번 방</button>`).join(""):`<span class="hint">아직 없어요.</span>`}</div>
+    ${mine.length?mine.map(b=>`<button class="btn" type="button" data-open="${b.id}" style="text-align:left">${md(b.date)} <span class="mono">${fmt(b.start)}–${fmt(b.end)}</span> · ${b.room}번 방${inUseNow(b)?" · <b>사용 중</b>":""}</button>`).join(""):`<span class="hint">아직 없어요.</span>`}</div>
     <div class="sep"></div>
     <button class="btn" type="button" id="logout">로그아웃</button>`;
   $("drawerBody").querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>{const x=S.bookings.find(y=>y.id===b.dataset.open);S.sel=x.date;render();openDetail(x.id)});
@@ -784,6 +826,8 @@ async function submit(){
 }
 
 /* ---- 상세 ---- */
+function adjBtn(b,dl){const why=adjCheck(b,dl,false);
+  return `<button class="btn sm ${dl>0?"ext":""}" type="button" data-adj="${dl}" ${why?"disabled":""}>${dl>0?"+":"−"}${Math.abs(dl)===60?"1시간":"30분"}<small>${why||"~"+fmt(b.end+dl)}</small></button>`}
 function openDetail(id,justMade){
   const b=S.bookings.find(x=>x.id===id);if(!b)return;
   const d=parseYmd(b.date),mine=isLeader()&&b.team===S.team,canCancel=mine||isAdmin();
@@ -798,10 +842,25 @@ function openDetail(id,justMade){
       <dt>연습</dt><dd>${esc(b.content||"-")}</dd>
       <dt>재료</dt><dd>${(b.kits||[]).map(k=>esc(kitText(k))+"세트").join(", ")||"없음"}</dd>
     </dl>
+    ${canCancel&&(isAdmin()||inUseNow(b))?`<div class="sep"></div>
+    <div class="field"><span>사용 시간 조정${inUseNow(b)?` · 지금 사용 중, ${b.end-nowMin()}분 남음`:" (관리자)"}</span>
+      <div class="adj">
+        <span class="lbl">조기 퇴실</span>${[-30,-60].map(dl=>adjBtn(b,dl)).join("")}
+        <span class="lbl">연장</span>${[30,60].map(dl=>adjBtn(b,dl)).join("")}
+      </div>
+      <div class="msg" id="adjMsg"></div></div>`:canCancel&&b.date===ymd()&&b.end>nowMin()?`<div class="hint">연장·조기 퇴실은 사용 시작(${fmt(b.start)}) 후에 할 수 있어요.</div>`:""}
     ${canCancel?`<div class="sep"></div>
     <div class="field"><span>카톡에 공유할 문구</span>
       <div class="paste"><input id="kakaoLine" readonly value="${esc(kakao)}"><button class="btn sm" type="button" id="copyBtn">복사</button></div></div>
     <div id="cancelZone"><button class="btn" type="button" id="cancelBtn">${isAdmin()&&!mine?"이 신청 취소 (관리자)":"신청 취소"}</button></div>`:""}`;
+  $("drawerBody").querySelectorAll("[data-adj]").forEach(btn=>btn.onclick=async()=>{
+    const dl=Number(btn.dataset.adj);btn.disabled=true;
+    try{const nb=await api.adjust(id,dl);await api.loadBookings();render();openDetail(id);
+      toast(dl>0?`${fmt(nb.end)}까지 연장했어요`:`${fmt(nb.end)} 퇴실로 바꿨어요`);
+    }catch(err){const m=$("adjMsg");m.className="msg err";
+      m.textContent=String(err.message||err.code).includes("23P01")||err.code==="23P01"?"바로 뒤에 다른 조 신청이 있어서 연장할 수 없어요.":errText(err);
+      try{await api.loadBookings();render()}catch(e){}btn.disabled=false}
+  });
   const cp=$("copyBtn");
   if(cp)cp.onclick=async()=>{const i=$("kakaoLine");try{await navigator.clipboard.writeText(i.value);toast("복사했어요")}catch(e){i.select();toast("선택했어요. 길게 눌러 복사하세요")}};
   const c=$("cancelBtn");
@@ -839,6 +898,7 @@ $("todayBtn").onclick=()=>go(ymd());
 $("datePick").onchange=e=>{if(e.target.value)go(e.target.value)};
 $("week").onclick=e=>{const b=e.target.closest("[data-date]");if(b)go(b.dataset.date)};
 $("loginInline").onclick=openLogin;
+$("notices").addEventListener("click",e=>{const b=e.target.closest("[data-adjopen]");if(b)openDetail(b.dataset.adjopen)});
 function syncThemeBtn(){const dark=document.documentElement.getAttribute("data-theme")==="dark";$("themeBtn").textContent=dark?"☀":"☾";$("themeBtn").setAttribute("aria-label",dark?"밝은 모드로 바꾸기":"다크 모드로 바꾸기")}
 $("themeBtn").onclick=()=>{const next=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",next);store("osce-theme",next);syncThemeBtn()};
 
