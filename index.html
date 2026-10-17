@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script src="teams.js"></script>
 <script>
 /* 테마: 기본은 밝게, 다크는 버튼으로 따로 */
 (function(){var t="light";try{t=localStorage.getItem("osce-theme")||"light"}catch(e){}document.documentElement.setAttribute("data-theme",t)})();
@@ -84,6 +85,15 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 
 /* week strip */
 .week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.wk-lbl{grid-column:1/-1;font-size:.72rem;font-weight:700;color:var(--muted);margin:2px 0 -2px 2px}
+.wk-lbl.next{margin-top:6px}
+.wd.unopen:not(.sel){opacity:.55}
+.wd.sat:not(.sel) .w{color:#3b6fd6}
+.teamleg{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.teamleg .lb{font-size:.74rem;font-weight:600;color:var(--muted);margin-right:2px}
+.tchip{display:inline-flex;align-items:center;font-size:.74rem;font-weight:700;border-radius:6px;padding:1px 8px 1px 6px;background:var(--pb);color:var(--pi);border-left:4px solid var(--ps)}
+.tchip.me{box-shadow:0 0 0 2px var(--ps)}
+@media (max-width:600px){.wd{padding:5px 2px 4px}.wd .d{font-size:.9rem}.wd .c{font-size:.6rem}}
 .wd{border-radius:11px;padding:8px 4px 7px;display:grid;justify-items:center;gap:2px;color:var(--muted);background:var(--surface);border:1px solid var(--line)}
 .wd:hover{border-color:var(--line-strong)}
 .wd .w{font-size:.72rem}
@@ -115,7 +125,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .can-book .col{cursor:copy}
 .can-book .col:hover{background-color:color-mix(in srgb,var(--accent-soft) 35%,transparent)}
 .slot-ghost{position:absolute;left:4px;right:4px;border:1.5px dashed var(--accent);border-radius:8px;color:var(--accent-ink);font-size:.74rem;font-weight:600;padding:3px 7px;pointer-events:none;z-index:1;background:color-mix(in srgb,var(--accent-soft) 70%,transparent)}
-.bk{position:absolute;left:4px;right:4px;border-radius:8px;padding:5px 8px;text-align:left;background:var(--pb);color:var(--pi);overflow:hidden;z-index:2;display:grid;align-content:start;gap:1px;font-size:.78rem;line-height:1.3;cursor:pointer;transition:transform .12s,box-shadow .12s}
+.bk{position:absolute;left:4px;right:4px;border-radius:8px;border-left:4px solid var(--ps);padding:5px 8px;text-align:left;background:var(--pb);color:var(--pi);overflow:hidden;z-index:2;display:grid;align-content:start;gap:1px;font-size:.78rem;line-height:1.3;cursor:pointer;transition:transform .12s,box-shadow .12s}
 .bk:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
 .bk b{font-weight:700}
 .bk .t{font-family:var(--t-mono);font-size:.68rem;opacity:.8}
@@ -261,7 +271,8 @@ textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(
   <div class="notices" id="notices"></div>
   <div class="notice" id="viewOnly" hidden><span><b>보기 전용</b> · 신청과 재료 대여는 조장만 할 수 있어요.</span><button class="btn sm" type="button" id="loginInline">조장·관리자 로그인</button></div>
 
-  <nav class="week" id="week" aria-label="주간 날짜"></nav>
+  <nav class="week" id="week" aria-label="주간 날짜 (이번 주·다음 주)"></nav>
+  <div class="teamleg" id="teamLeg"></div>
 
   <div class="layout" id="layout">
     <section class="card" aria-labelledby="gt">
@@ -322,7 +333,7 @@ const kitText=k=>{const [id,s]=k.split("-");return KITNAME[id]+" "+s};
 const kitShort=k=>{const [id,s]=k.split("-");return KITSHORT[id]+s};
 const md=s=>{const d=parseYmd(s);return `${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`};
 const hourPx=()=>parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--hour"))||48;
-const palette=t=>{let h=0;for(const c of String(t))h=(h*31+c.charCodeAt(0))>>>0;const i=/^[A-Z]$/.test(t)?(t.charCodeAt(0)-65)%8:h%8;return `--pb:var(--p${i});--pi:var(--p${i}i)`};
+const palette=t=>window.OSCETeams.style(t);
 function store(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}}
 let toastT;function toast(t){const el=$("toast");el.textContent=t;el.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("on"),2600)}
 
@@ -380,6 +391,7 @@ if(LIVE){
     },
     async loadKits(){const {data,error}=await sb.from("kits").select("*");if(error)throw error;S.kits=Object.fromEntries(data.map(r=>[r.id,r]))},
     async loadMeta(){
+      try{const {data,error}=await sb.rpc("list_teams");if(!error&&data)S.teamList=data.map(x=>typeof x==="string"?x:Object.values(x)[0])}catch(e){}
       const [r,s,k]=await Promise.all([sb.from("rooms").select("*"),sb.from("settings").select("*").eq("key","notice"),sb.from("blocks").select("*").gte("date",addDays(ymd(),-1)).order("date").order("start_min")]);
       if(!k.error)S.blocks=k.data.map(x=>({id:x.id,date:x.date,start:x.start_min,end:x.end_min,reason:x.reason||"",rooms:x.rooms&&x.rooms.length?x.rooms:ROOMS.slice()}));
       if(!r.error)S.rooms=Object.fromEntries(r.data.map(x=>[x.room,x]));
@@ -422,7 +434,7 @@ if(LIVE){
     async login(code){return who(code)},
     async loadBookings(){S.bookings=db.bookings.slice()},
     async loadKits(){S.kits={...db.kits}},
-    async loadMeta(){S.rooms={...db.rooms};S.notice=db.notice||"";S.blocks=(db.blocks||[]).map(k=>({...k,rooms:k.rooms||ROOMS.slice()}))},
+    async loadMeta(){S.rooms={...db.rooms};S.notice=db.notice||"";S.blocks=(db.blocks||[]).map(k=>({...k,rooms:k.rooms||ROOMS.slice()}));S.teamList=["A","B","C","D","E","F","G","H"]},
     async add(b){
       const w=who(S.code);if(!w)throw new Error("NOT_LEADER");
       const team=w.role==="admin"?String(b.team||"").toUpperCase():w.team;
@@ -519,12 +531,19 @@ function renderTop(){
   const d=parseYmd(S.sel);
   $("dateText").textContent=`${d.getMonth()+1}월 ${d.getDate()}일 (${WD[d.getDay()]})`;
   $("datePick").value=S.sel;
-  const mon=addDays(S.sel,-((d.getDay()+6)%7)),t=ymd();
+  const t=ymd(),td=parseYmd(t),thisMon=addDays(t,-((td.getDay()+6)%7));
+  const selMon=addDays(S.sel,-((d.getDay()+6)%7));
+  const mon=(S.sel>=thisMon&&S.sel<=addDays(thisMon,13))?thisMon:selMon;
+  const wkName=m=>(m===thisMon?"이번 주":m===addDays(thisMon,7)?"다음 주":m===addDays(thisMon,-7)?"지난 주":`${md(m)} 주`)+` · ${md(m).replace(/\(.\)/,"")}–${md(addDays(m,6)).replace(/\(.\)/,"")}`;
   let h="";
-  for(let i=0;i<7;i++){const s=addDays(mon,i),x=parseYmd(s),n=dayBookings(s).length;
-    h+=`<button type="button" class="wd ${s===S.sel?"sel":""} ${s===t?"today":""} ${x.getDay()===0?"sun":""}" data-date="${s}" aria-label="${x.getMonth()+1}월 ${x.getDate()}일, 신청 ${n}건">
-      <span class="w">${WD[x.getDay()]}</span><span class="d">${x.getDate()}</span><span class="c">${n?n+"건":(s>lastBookable()?"미오픈":"")}</span></button>`}
+  for(let i=0;i<14;i++){const s=addDays(mon,i),x=parseYmd(s),n=dayBookings(s).length,wd=x.getDay();
+    if(i%7===0)h+=`<div class="wk-lbl ${i?"next":""}">${wkName(addDays(mon,i))}</div>`;
+    const unopen=s>lastBookable();
+    h+=`<button type="button" class="wd ${s===S.sel?"sel":""} ${s===t?"today":""} ${wd===0?"sun":""} ${wd===6?"sat":""} ${unopen?"unopen":""}" data-date="${s}" aria-label="${x.getMonth()+1}월 ${x.getDate()}일, 신청 ${n}건${unopen?", 아직 신청 전":""}" title="${unopen?"아직 신청이 열리지 않은 날":""}">
+      <span class="w">${WD[wd]}</span><span class="d">${x.getDate()===1?(x.getMonth()+1)+"/1":x.getDate()}</span><span class="c">${n?n+"건":""}</span></button>`}
   $("week").innerHTML=h;
+  const tl=window.OSCETeams.list();
+  $("teamLeg").innerHTML=tl.length?`<span class="lb">조 색상</span>`+tl.map(x=>`<span class="tchip ${isLeader()&&x===S.team?"me":""}" style="${palette(x)}">${esc(x)}</span>`).join(""):"";
   const list=dayBookings(S.sel);
   $("dayMeta").textContent=list.length?`신청 ${list.length}건 · 하루 비어 있는 방 ${ROOMS.filter(r=>!list.some(b=>b.room===r)&&roomInfo(r).open).length}개`:"아직 신청 없음";
 }
@@ -902,7 +921,8 @@ $("notices").addEventListener("click",e=>{const b=e.target.closest("[data-adjope
 function syncThemeBtn(){const dark=document.documentElement.getAttribute("data-theme")==="dark";$("themeBtn").textContent=dark?"☀":"☾";$("themeBtn").setAttribute("aria-label",dark?"밝은 모드로 바꾸기":"다크 모드로 바꾸기")}
 $("themeBtn").onclick=()=>{const next=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",next);store("osce-theme",next);syncThemeBtn()};
 
-function render(){renderAuth();renderNotices();renderTop();renderGrid();renderKits()}
+function syncTeams(){window.OSCETeams.set([...(S.teamList||[]),...S.bookings.map(b=>b.team)])}
+function render(){syncTeams();renderAuth();renderNotices();renderTop();renderGrid();renderKits()}
 
 /* ================= 시작 ================= */
 (async function boot(){

@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
+<script src="teams.js"></script>
 <script>
 (function(){var t="light";try{t=localStorage.getItem("osce-theme")||"light"}catch(e){}document.documentElement.setAttribute("data-theme",t)})();
 </script>
@@ -152,6 +153,36 @@ h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
 .s.held{background:var(--held-soft);color:var(--held)}
 .s.out{background:var(--out-soft);color:var(--out)}
 .ks .w{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.blk{border-left:3px solid var(--ps)}
+.room.busy{box-shadow:inset 4px 0 0 var(--ps),var(--shadow)}
+.teamleg{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:-2px 0 8px}
+.tchip{display:inline-flex;align-items:center;font-size:.72rem;font-weight:700;border-radius:6px;padding:1px 7px 1px 5px;background:var(--pb);color:var(--pi);border-left:4px solid var(--ps);white-space:nowrap}
+/* 조별 연습 기록 */
+.histbtn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);text-align:left}
+.histbtn:hover{border-color:var(--line-strong)}
+.histbtn b{font-size:1rem}
+.histbtn .meta{font-size:.8rem;color:var(--muted)}
+.histbtn .chev{font-size:1rem;color:var(--muted);transition:transform .15s}
+.histbtn[aria-expanded="true"] .chev{transform:rotate(90deg)}
+.hist{display:grid;gap:8px;margin-top:10px}
+.hsum{font-size:.8rem;color:var(--muted)}
+.trow{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--ps);border-radius:12px;overflow:hidden}
+.trow>button{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;text-align:left}
+.trow .nm{font-weight:700;font-size:.95rem;min-width:3.2em;color:var(--pi);background:var(--pb);border-radius:7px;padding:2px 8px;text-align:center}
+.trow .st{display:grid;gap:1px;min-width:0}
+.trow .st .l1{font-size:.86rem;font-weight:600}
+.trow .st .l2{font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trow .chev{color:var(--muted);transition:transform .15s}
+.trow.open .chev{transform:rotate(90deg)}
+.trow .zero{color:var(--faint)}
+.sess{display:none;border-top:1px solid var(--line);padding:4px 12px 10px}
+.trow.open .sess{display:block}
+.sess table{width:100%;border-collapse:collapse;font-size:.8rem}
+.sess td{padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+.sess tr:last-child td{border-bottom:0}
+.sess td.d{white-space:nowrap;font-family:var(--t-mono);font-size:.74rem;color:var(--muted);width:1%}
+.sess td.r{white-space:nowrap;width:1%;color:var(--muted)}
+.sess .k{display:block;font-size:.7rem;color:var(--muted);margin-top:1px}
 .foot{font-size:.78rem;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;justify-content:space-between}
 .link{font-size:.84rem;color:var(--accent-ink);font-weight:600;text-decoration:none}
 
@@ -226,12 +257,20 @@ h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
 
   <section aria-labelledby="tlH">
     <h2 id="tlH"><span id="tlTitle">시간표</span> <small id="tlSub"></small></h2>
+    <div class="teamleg" id="teamLeg"></div>
     <div class="card"><div class="tl-scroll" id="tl"></div></div>
   </section>
 
   <section aria-labelledby="kH">
     <h2 id="kH">재료 현황 <small>지금 기준</small></h2>
     <div class="kits" id="kits"></div>
+  </section>
+
+  <section aria-label="조별 연습 기록">
+    <button class="histbtn" type="button" id="histBtn" aria-expanded="false" aria-controls="hist">
+      <span><b>조별 연습 기록</b> <span class="meta">지금까지 끝난 연습을 조별로 정리했어요</span></span><span class="chev">›</span>
+    </button>
+    <div class="hist" id="hist" hidden></div>
   </section>
 
   <footer class="foot">
@@ -258,10 +297,11 @@ const fmt=m=>pad(Math.floor(m/60))+":"+pad(m%60);
 const nowMin=()=>{const n=new Date();return n.getHours()*60+n.getMinutes()};
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const teamLabel=b=>[b.day,b.team?b.team+"조":""].filter(Boolean).join(" ");
-const palette=t=>{let h=0;for(const c of String(t))h=(h*31+c.charCodeAt(0))>>>0;const i=/^[A-Z]$/.test(t)?(t.charCodeAt(0)-65)%8:h%8;return `--pb:var(--p${i});--pi:var(--p${i}i)`};
+const palette=t=>window.OSCETeams.style(t);
 function store(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
 
-const S={bookings:[],kits:{},rooms:{},notice:"",blocks:[],sel:ymd(),lastSync:null};
+const S={bookings:[],kits:{},rooms:{},notice:"",blocks:[],sel:ymd(),lastSync:null,teamList:[],past:null,histOpen:false,openTeams:new Set()};
+let loadPast=async()=>{};
 const roomInfo=r=>S.rooms[r]||{thomas:true,open:true,memo:""};
 const KITSHORT={anes:"마취",ext:"발치",sut:"봉합",tbi:"TBI",fl:"불소",seal:"실란트",rd:"러버댐",srp:"SRP",ept:"EPT",probe:"치주낭"};
 const kitShort=k=>{const [id,n]=k.split("-");return (KITSHORT[id]||id)+n};
@@ -277,21 +317,27 @@ let load,subscribe;
 if(LIVE){
   const sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
   load=async()=>{
-    const [b,k,rm,st,bl]=await Promise.all([
+    const [b,k,rm,st,bl,tl]=await Promise.all([
       sb.from("bookings").select("*").gte("date",ymd()).lte("date",addDays(ymd(),SPAN_DAYS-1)).order("start_min").limit(5000),
       sb.from("kits").select("*"),
       sb.from("rooms").select("*"),
       sb.from("settings").select("*").eq("key","notice"),
-      sb.from("blocks").select("*").gte("date",ymd()).order("date").order("start_min")
+      sb.from("blocks").select("*").gte("date",ymd()).order("date").order("start_min"),
+      sb.rpc("list_teams")
     ]);
+    if(tl&&!tl.error&&tl.data)S.teamList=tl.data.map(x=>typeof x==="string"?x:Object.values(x)[0]);
     if(bl&&!bl.error)S.blocks=bl.data.map(x=>({id:x.id,date:x.date,start:x.start_min,end:x.end_min,reason:x.reason||"",rooms:x.rooms&&x.rooms.length?x.rooms:ROOMS.slice()}));
     if(b.error||k.error)throw (b.error||k.error);
     if(!rm.error)S.rooms=Object.fromEntries(rm.data.map(x=>[x.room,x]));
     if(!st.error)S.notice=(st.data[0]&&st.data[0].value)||"";
     S.bookings=b.data.map(rowToBooking);S.kits=Object.fromEntries(k.data.map(r=>[r.id,r]));S.lastSync=new Date();
   };
+  loadPast=async()=>{
+    const {data,error}=await sb.from("bookings").select("*").lte("date",ymd()).order("date",{ascending:false}).order("start_min",{ascending:false}).limit(5000);
+    if(error)throw error;S.past=data.map(rowToBooking);
+  };
   subscribe=()=>{
-    let t;const refresh=()=>{clearTimeout(t);t=setTimeout(()=>load().then(render).catch(()=>setLive("off")),150)};
+    let t;const refresh=()=>{clearTimeout(t);t=setTimeout(()=>load().then(async()=>{if(S.histOpen){try{await loadPast()}catch(e){}}render()}).catch(()=>setLive("off")),150)};
     sb.channel("osce-view")
       .on("postgres_changes",{event:"*",schema:"public",table:"bookings"},refresh)
       .on("postgres_changes",{event:"*",schema:"public",table:"kits"},refresh)
@@ -321,7 +367,14 @@ if(LIVE){
     S.kits={"sut-2":{status:"out",who:"G조"}};
     S.rooms={3:{thomas:false,open:true,memo:""},6:{thomas:false,open:false,memo:"오후 점검"}};
     S.notice="10/20(월) 오후에는 1–3번 방을 교수님 실습으로 사용합니다.";
+    S.teamList=["A","B","C","D","E","F","G","H"];
     S.blocks=[{id:"k1",date:addDays(t,1),start:780,end:900,reason:"교수님 실습",rooms:[1,2,3]},{id:"k2",date:t,start:Math.floor(n/30)*30-30,end:Math.floor(n/30)*30+60,reason:"기자재 점검",rooms:[3]}];S.lastSync=new Date()};
+  loadPast=async()=>{const t=ymd(),bk=(id,o,room,s,dur,day,team,content,kits)=>({id,date:addDays(t,o),room,start:s,end:s+dur,day,team,content,kits});
+    S.past=[...S.bookings.filter(b=>b.date===t),
+      bk("p1",-1,1,540,120,"2일차","C","A형 모의고사",["anes-1","ext-1"]),bk("p2",-1,2,600,60,"2일차","A","봉합",["sut-1"]),
+      bk("p3",-1,3,780,120,"2일차","B","러버댐·실란트",["rd-1","seal-1"]),bk("p4",-2,4,540,120,"1일차","C","SRP·치주낭 측정",["srp-1","probe-1"]),
+      bk("p5",-2,1,660,60,"1일차","D","EPT",["ept-1"]),bk("p6",-3,5,840,120,"1일차","A","B형 모의고사",["anes-2","ext-2"]),
+      bk("p7",-3,2,540,60,"1일차","F","TBI·불소",["tbi-1","fl-1"])]};
   subscribe=()=>setLive("demo");
 }
 function setLive(st){$("live").className="live "+(st==="on"?"on":st==="off"?"off":"");
@@ -444,7 +497,40 @@ function renderKits(){
   $("kits").innerHTML=KITS.map(([k,n])=>`<div class="kit"><span class="kn">${n}</span><div class="sets">${SETS.map(s=>{const st=kitState(k+"-"+s);
     return `<div class="ks"><span class="s ${st.cls}" title="${s}세트 ${st.t} ${esc(st.w)}"><i></i>${s} ${st.t}</span><span class="w">${esc(st.w)}</span></div>`}).join("")}</div></div>`).join("");
 }
-function render(){renderHead();renderNotices();renderDays();renderRooms();renderTimeline();renderKits()}
+function renderHistory(){
+  const btn=$("histBtn"),box=$("hist");
+  btn.setAttribute("aria-expanded",S.histOpen);box.hidden=!S.histOpen;
+  if(!S.histOpen)return;
+  if(!S.past){box.innerHTML=`<div class="hsum">불러오는 중…</div>`;return}
+  const t=ymd(),nm=nowMin();
+  const done=S.past.filter(b=>b.date<t||(b.date===t&&b.end<=nm));
+  const teams=window.OSCETeams.list();
+  const by={};teams.forEach(x=>by[x]=[]);done.forEach(b=>{(by[b.team]=by[b.team]||[]).push(b)});
+  const names=Object.keys(by).sort((a,b)=>a.localeCompare(b,"ko",{numeric:true}));
+  const hrs=m=>{const h=m/60;return (Math.round(h*10)/10)+"시간"};
+  const totalMin=done.reduce((a,b)=>a+(b.end-b.start),0);
+  let h=`<div class="hsum">전체 ${done.length}회 · ${hrs(totalMin)} · 조 이름을 누르면 날짜별 기록이 열려요</div>`;
+  for(const name of names){
+    const list=by[name].slice().sort((a,b)=>b.date.localeCompare(a.date)||b.start-a.start);
+    const mins=list.reduce((a,b)=>a+(b.end-b.start),0);
+    const kc={};list.forEach(b=>(b.kits||[]).forEach(k=>{const id=k.split("-")[0];kc[id]=(kc[id]||0)+1}));
+    const kitLine=Object.entries(kc).sort((a,b)=>b[1]-a[1]).map(([id,n])=>`${KITSHORT[id]||id} ${n}`).join(" · ");
+    const open=S.openTeams.has(name);
+    h+=`<div class="trow ${open?"open":""}" style="${palette(name)}">
+      <button type="button" data-team="${esc(name)}" aria-expanded="${open}" ${list.length?"":"disabled"}>
+        <span class="nm">${esc(name)}</span>
+        <span class="st">${list.length?`<span class="l1">${list.length}회 · ${hrs(mins)} · 최근 ${md(list[0].date)}</span><span class="l2">${kitLine?"재료 "+kitLine:"재료 기록 없음"}</span>`:`<span class="l1 zero">아직 연습 기록 없음</span>`}</span>
+        <span class="chev">${list.length?"›":""}</span></button>
+      ${list.length?`<div class="sess"><table>${list.map(b=>`<tr><td class="d">${md(b.date)}<br>${fmt(b.start)}–${fmt(b.end)}</td><td class="r">${b.room}번</td><td>${esc(b.day?b.day+" · ":"")}${esc(b.content||"연습")}${(b.kits||[]).length?`<span class="k">${b.kits.map(kitShort).join(" · ")}</span>`:""}</td></tr>`).join("")}</table></div>`:""}
+    </div>`;
+  }
+  box.innerHTML=h;
+}
+$("histBtn").addEventListener("click",async()=>{S.histOpen=!S.histOpen;renderHistory();
+  if(S.histOpen&&!S.past){try{await loadPast()}catch(e){$("hist").innerHTML=`<div class="hsum">기록을 불러오지 못했어요. 잠시 뒤 다시 눌러 주세요.</div>`;return}renderHistory()}});
+$("hist").addEventListener("click",e=>{const b=e.target.closest("[data-team]");if(!b)return;const n=b.dataset.team;S.openTeams.has(n)?S.openTeams.delete(n):S.openTeams.add(n);renderHistory()});
+function renderLegend(){const tl=window.OSCETeams.list();$("teamLeg").innerHTML=tl.map(x=>`<span class="tchip" style="${palette(x)}">${esc(x)}</span>`).join("")}
+function render(){window.OSCETeams.set([...(S.teamList||[]),...S.bookings.map(b=>b.team)]);renderLegend();renderHead();renderNotices();renderDays();renderRooms();renderTimeline();renderKits();renderHistory()}
 
 /* ---------- controls ---------- */
 $("days").addEventListener("click",e=>{const b=e.target.closest("[data-date]");if(!b)return;S.sel=b.dataset.date;render();
