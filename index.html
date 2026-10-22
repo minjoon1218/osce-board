@@ -543,6 +543,7 @@ function renderTop(){
       <span class="w">${WD[wd]}</span><span class="d">${x.getDate()===1?(x.getMonth()+1)+"/1":x.getDate()}</span><span class="c">${n?n+"건":""}</span></button>`}
   $("week").innerHTML=h;
   const tl=window.OSCETeams.list();
+  $("teamLeg").hidden=!window.OSCETeams.showLegend;
   $("teamLeg").innerHTML=tl.length?`<span class="lb">조 색상</span>`+tl.map(x=>`<span class="tchip ${isLeader()&&x===S.team?"me":""}" style="${palette(x)}">${esc(x)}</span>`).join(""):"";
   const list=dayBookings(S.sel);
   $("dayMeta").textContent=list.length?`신청 ${list.length}건 · 하루 비어 있는 방 ${ROOMS.filter(r=>!list.some(b=>b.room===r)&&roomInfo(r).open).length}개`:"아직 신청 없음";

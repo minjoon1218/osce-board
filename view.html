@@ -529,7 +529,7 @@ function renderHistory(){
 $("histBtn").addEventListener("click",async()=>{S.histOpen=!S.histOpen;renderHistory();
   if(S.histOpen&&!S.past){try{await loadPast()}catch(e){$("hist").innerHTML=`<div class="hsum">기록을 불러오지 못했어요. 잠시 뒤 다시 눌러 주세요.</div>`;return}renderHistory()}});
 $("hist").addEventListener("click",e=>{const b=e.target.closest("[data-team]");if(!b)return;const n=b.dataset.team;S.openTeams.has(n)?S.openTeams.delete(n):S.openTeams.add(n);renderHistory()});
-function renderLegend(){const tl=window.OSCETeams.list();$("teamLeg").innerHTML=tl.map(x=>`<span class="tchip" style="${palette(x)}">${esc(x)}</span>`).join("")}
+function renderLegend(){const tl=window.OSCETeams.list();$("teamLeg").hidden=!window.OSCETeams.showLegend;$("teamLeg").innerHTML=tl.map(x=>`<span class="tchip" style="${palette(x)}">${esc(x)}</span>`).join("")}
 function render(){window.OSCETeams.set([...(S.teamList||[]),...S.bookings.map(b=>b.team)]);renderLegend();renderHead();renderNotices();renderDays();renderRooms();renderTimeline();renderKits();renderHistory()}
 
 /* ---------- controls ---------- */
