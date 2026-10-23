@@ -74,6 +74,9 @@ h1{margin:0;font-size:1.35rem;font-weight:700;letter-spacing:-.02em;white-space:
 .day .c{font-size:.64rem;font-weight:700;color:var(--accent-ink);min-height:1.1em}
 .day.sat .w{color:#3b6fd6} .day.sun .w{color:var(--out)}
 .day.mon1{margin-left:6px}
+.day.past:not([aria-pressed="true"]){background:var(--sunk);border-style:dashed}
+.day.past .c{color:var(--muted)}
+.day.today1{margin-left:10px}
 .day[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .day[aria-pressed="true"] .n,.day[aria-pressed="true"] .c,.day[aria-pressed="true"] .w{color:var(--on-accent)}
 .selline{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
@@ -287,6 +290,7 @@ const KITS=[["anes","마취 세트"],["ext","발치"],["sut","봉합"],["tbi","T
 const SETS=[1,2];
 const OPEN=8*60,CLOSE=22*60;
 const SPAN_DAYS=28;
+const PAST_DAYS=5;   /* 날짜 띠에서 볼 수 있는 지난 날짜 수 */
 const WD=["일","월","화","수","목","금","토"];
 const $=id=>document.getElementById(id);
 const pad=n=>String(n).padStart(2,"0");
@@ -318,11 +322,11 @@ if(LIVE){
   const sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
   load=async()=>{
     const [b,k,rm,st,bl,tl]=await Promise.all([
-      sb.from("bookings").select("*").gte("date",ymd()).lte("date",addDays(ymd(),SPAN_DAYS-1)).order("start_min").limit(5000),
+      sb.from("bookings").select("*").gte("date",addDays(ymd(),-PAST_DAYS)).lte("date",addDays(ymd(),SPAN_DAYS-1)).order("start_min").limit(5000),
       sb.from("kits").select("*"),
       sb.from("rooms").select("*"),
       sb.from("settings").select("*").eq("key","notice"),
-      sb.from("blocks").select("*").gte("date",ymd()).order("date").order("start_min"),
+      sb.from("blocks").select("*").gte("date",addDays(ymd(),-PAST_DAYS)).order("date").order("start_min"),
       sb.rpc("list_teams")
     ]);
     if(tl&&!tl.error&&tl.data)S.teamList=tl.data.map(x=>typeof x==="string"?x:Object.values(x)[0]);
@@ -362,7 +366,10 @@ if(LIVE){
       bk("e8",addDays(t,1),1,600,60,"4일차","C","실란트",["seal-1"]),
       bk("e9",addDays(t,3),2,780,120,"5일차","G","A형 모의고사",["anes-1"]),
       bk("e10",addDays(t,3),5,840,60,"5일차","B","EPT",["ept-1"]),
-      bk("e11",addDays(t,6),4,540,120,"6일차","A","발치·봉합",["ext-1","sut-1"])
+      bk("e11",addDays(t,6),4,540,120,"6일차","A","발치·봉합",["ext-1","sut-1"]),
+      bk("e12",addDays(t,-1),2,600,120,"2일차","C","A형 모의고사",["anes-1","ext-1"]),
+      bk("e13",addDays(t,-1),4,780,60,"2일차","B","러버댐",["rd-1"]),
+      bk("e14",addDays(t,-3),1,540,120,"1일차","A","SRP·치주낭 측정",["srp-1","probe-1"])
     ];
     S.kits={"sut-2":{status:"out",who:"G조"}};
     S.rooms={3:{thomas:false,open:true,memo:""},6:{thomas:false,open:false,memo:"오후 점검"}};
@@ -387,15 +394,15 @@ function renderHead(){
 }
 function renderDays(){
   const t=ymd();let h="";
-  for(let i=0;i<SPAN_DAYS;i++){
+  for(let i=-PAST_DAYS;i<SPAN_DAYS;i++){
     const s=addDays(t,i),x=toDate(s),n=S.bookings.filter(b=>b.date===s).length,wd=x.getDay();
-    h+=`<button type="button" class="day ${wd===6?"sat":""} ${wd===0?"sun":""} ${wd===1&&i>0?"mon1":""}" data-date="${s}" aria-pressed="${s===S.sel}" aria-label="${x.getMonth()+1}월 ${x.getDate()}일 ${WD[wd]}요일, 신청 ${n}건">
-      <span class="w">${i===0?"오늘":WD[wd]}</span><span class="n">${x.getMonth()+1===toDate(t).getMonth()+1||x.getDate()!==1?x.getDate():(x.getMonth()+1)+"/"+x.getDate()}</span><span class="c">${n?n+"건":""}</span></button>`;
+    h+=`<button type="button" class="day ${wd===6?"sat":""} ${wd===0?"sun":""} ${wd===1&&i>0?"mon1":""} ${i<0?"past":""} ${i===0?"today1":""}" data-date="${s}" aria-pressed="${s===S.sel}" aria-label="${x.getMonth()+1}월 ${x.getDate()}일 ${WD[wd]}요일, 신청 ${n}건">
+      <span class="w">${i===0?"오늘":i===-1?"어제":WD[wd]}</span><span class="n">${x.getDate()===1?(x.getMonth()+1)+"/1":x.getDate()}</span><span class="c">${n?n+"건":""}</span></button>`;
   }
   $("days").innerHTML=h;
 }
 function dayTitle(){const x=toDate(S.sel),off=Math.round((x-toDate(ymd()))/864e5);
-  return `${x.getMonth()+1}월 ${x.getDate()}일 (${WD[x.getDay()]})`+(off===0?" · 오늘":off===1?" · 내일":"")}
+  return `${x.getMonth()+1}월 ${x.getDate()}일 (${WD[x.getDay()]})`+(off===0?" · 오늘":off===1?" · 내일":off===-1?" · 어제":off<0?` · ${-off}일 전`:"")}
 const roomsLabel=rs=>!rs||rs.length>=ROOMS.length?"전체 방":rs.join("·")+"번 방";
 function renderNotices(){
   let h="";
@@ -412,8 +419,9 @@ function renderRooms(){
   $("nowTitle").textContent=today?"지금 방 상황":dayTitle();
   const openRooms=ROOMS.filter(r=>roomInfo(r).open);
   const busyN=today?openRooms.filter(r=>list.some(b=>b.room===r&&b.start<=nm&&nm<b.end)).length:0;
-  const thomasN=ROOMS.filter(r=>roomInfo(r).thomas).length;
-  $("nowSub").textContent=(today?`사용 중 ${busyN} · 비어 있음 ${openRooms.length-busyN}`:(list.length?`신청 ${list.length}건`:"신청 없음"))+(openRooms.length<6?` · 사용 불가 ${6-openRooms.length}`:"")+` · 토마스 ${thomasN}개 방`;
+  const thomasN=ROOMS.filter(r=>roomInfo(r).thomas).length,pastDay=S.sel<ymd();
+  if(pastDay){$("nowSub").textContent=list.length?`지난 기록 ${list.length}건`:"기록 없음"}
+  else $("nowSub").textContent=(today?`사용 중 ${busyN} · 비어 있음 ${openRooms.length-busyN}`:(list.length?`신청 ${list.length}건`:"신청 없음"))+(openRooms.length<6?` · 사용 불가 ${6-openRooms.length}`:"")+` · 토마스 ${thomasN}개 방`;
   let h="";
   const blkFor=r=>today?S.blocks.find(k=>k.date===S.sel&&(k.rooms||ROOMS).includes(r)&&k.start<=nm&&nm<k.end):null;
   const allNow=today&&ROOMS.every(r=>blkFor(r));
@@ -426,7 +434,7 @@ function renderRooms(){
         <div class="sub">${esc(blkNow.reason||"관리자 설정")}</div>
         ${att(r,[])}</article>`;continue}
     const ri=roomInfo(r),rl=list.filter(b=>b.room===r).sort((a,b)=>a.start-b.start);
-    if(!ri.open){
+    if(!ri.open&&!pastDay){
       h+=`<article class="room closed">
         <div class="rh"><span class="rn">${r}번</span><span class="badge closed">사용 불가</span></div>
         <div class="main closed">사용 불가</div>
@@ -458,9 +466,9 @@ function renderRooms(){
     }else{
       const maxM=2;
       h+=`<article class="room">
-        <div class="rh"><span class="rn">${r}번</span><span class="badge ${rl.length?"cnt":"free"}">${rl.length?rl.length+"건":"비어 있음"}</span></div>
-        ${rl.length?`<div class="slots">${rl.slice(0,4).map((b,i)=>`<div class="${i>=maxM?"more":""}"><span class="mono">${fmt(b.start)}</span> ${esc(b.team)}조<span class="hide-m">${(b.kits||[]).length?" · "+b.kits.map(kitShort).join(" "):""}</span></div>`).join("")}</div>${rl.length>maxM?`<div class="foot-line m-more">외 ${rl.length-maxM}건</div>`:""}`:`<div class="main free">예약 없음</div>`}
-        ${att(r,[])}</article>`;
+        <div class="rh"><span class="rn">${r}번</span><span class="badge ${rl.length||pastDay?"cnt":"free"}">${rl.length?rl.length+"건":pastDay?"없음":"비어 있음"}</span></div>
+        ${rl.length?`<div class="slots">${rl.slice(0,4).map((b,i)=>`<div class="${i>=maxM?"more":""}"><span class="mono">${fmt(b.start)}</span> ${esc(b.team)}조<span class="hide-m">${(b.kits||[]).length?" · "+b.kits.map(kitShort).join(" "):""}</span></div>`).join("")}</div>${rl.length>maxM?`<div class="foot-line m-more">외 ${rl.length-maxM}건</div>`:""}`:`<div class="main free" ${pastDay?'style="color:var(--faint)"':""}>${pastDay?"기록 없음":"예약 없음"}</div>`}
+        ${pastDay?`<div class="att">${[...new Set(rl.flatMap(b=>b.kits||[]))].map(k=>`<span class="chipx kt">${esc(kitShort(k))}</span>`).join("")}</div>`:att(r,[])}</article>`;
     }
   }
   $("rooms").innerHTML=h;
@@ -546,6 +554,7 @@ $("themeBtn").onclick=()=>{const n=document.documentElement.getAttribute("data-t
   render();
   try{await load()}catch(e){setLive("off")}
   render();subscribe();
+  {const dz=$("days"),tb=dz.querySelector(".day.today1");if(dz&&tb)dz.scrollLeft=Math.max(0,tb.offsetLeft-dz.offsetLeft-dz.clientWidth*0.0-70)}
   let lastDay=ymd();
   setInterval(async()=>{
     if(ymd()!==lastDay){const wasToday=S.sel===lastDay;lastDay=ymd();if(wasToday||S.sel<lastDay)S.sel=lastDay;try{await load()}catch(e){}}
