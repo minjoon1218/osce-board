@@ -311,8 +311,7 @@ const KITSHORT={anes:"마취",ext:"발치",sut:"봉합",tbi:"TBI",fl:"불소",se
 const SETS=[1,2];
 const DURS=[60,120];
 const OPEN=8*60, CLOSE=22*60;
-const ROLLOVER=22;   /* 매일 밤 10시에 다음 날짜 오픈 */
-const AHEAD=2;       /* 2일 후까지 */
+const ROLLOVER=21;   /* 매일 21:00에 다음 날 오픈 (그 전엔 오늘까지만) */
 const DAILY=2;       /* 조당 하루 2회까지 */
 const MAXLEN=180;    /* 연장 포함 한 번 사용 최대 3시간 */
 const WD=["일","월","화","수","목","금","토"];
@@ -344,9 +343,21 @@ const isAdmin=()=>S.role==="admin";
 const canAct=()=>isLeader()||isAdmin();
 const roomInfo=r=>S.rooms[r]||{thomas:true,open:true,memo:""};
 
-/* ---- 예약 가능 기간: 오늘 ~ 2일 후, 밤 10시에 하루 더 열림 ---- */
-function lastBookable(){const n=new Date();return addDays(ymd(n),AHEAD+(n.getHours()>=ROLLOVER?1:0))}
-function nextOpenDate(){const n=new Date();return addDays(ymd(n),AHEAD+(n.getHours()>=ROLLOVER?2:1))}
+/* ---- 예약 가능 기간: 평소엔 오늘까지, 매일 21:00에 다음 날 오픈 + 관리자가 따로 연 날짜(open_dates) ---- */
+function lastBookable(){const n=new Date();let last=addDays(ymd(n),n.getHours()>=ROLLOVER?1:0);
+  for(const o of S.openDates||[])if(new Date(o.opens_at)<=n&&o.date>last)last=o.date;return last}
+/* 다음에 열리는 날짜와 시각 {date, at:Date} */
+function nextOpen(){const n=new Date(),last=lastBookable(),c=[];
+  const t=ymd(n),rd=new Date(n);rd.setHours(ROLLOVER,0,0,0);if(n>=rd)rd.setDate(rd.getDate()+1);
+  let rDate=addDays(ymd(rd),1);while(rDate<=last){rd.setDate(rd.getDate()+1);rDate=addDays(ymd(rd),1)}
+  c.push({date:rDate,at:rd});
+  for(const o of S.openDates||[]){const at=new Date(o.opens_at);if(at>n&&o.date>last)c.push({date:o.date,at})}
+  c.sort((a,b)=>a.at-b.at);return c[0]}
+function whenText(at){const n=new Date(),d=ymd(at),hm=pad(at.getHours())+":"+pad(at.getMinutes());
+  return (d===ymd(n)?"오늘":d===addDays(ymd(n),1)?"내일":md(d))+" "+hm}
+function openTimeFor(date){const o=(S.openDates||[]).find(x=>x.date===date);
+  const rule=parseYmd(addDays(date,-1));rule.setHours(ROLLOVER,0,0,0);
+  if(o){const at=new Date(o.opens_at);return at<rule?at:rule}return rule}
 function dateBookable(d){if(isAdmin())return true;return d>=ymd()&&d<=lastBookable()}
 
 /* ================= 오류 문구 ================= */
@@ -366,7 +377,7 @@ function errText(e){
   if(m.includes("TEAM_BUSY"))return "이 조는 이 시간에 이미 다른 방을 신청했어요.";
   if(m.includes("KIT_TAKEN"))return "방금 다른 조가 같은 재료 세트를 잡았어요. 재료를 다시 골라 주세요.";
   if(m.includes("BAD_DURATION"))return "사용 시간은 1시간 또는 2시간만 고를 수 있어요.";
-  if(m.includes("TOO_FAR"))return `${md(lastBookable())}까지만 신청할 수 있어요. 매일 밤 10시에 다음 날짜가 열려요.`;
+  if(m.includes("TOO_FAR"))return `${md(lastBookable())}까지만 신청할 수 있어요. 매일 21:00에 다음 날이 열려요.`;
   if(m.includes("PAST"))return "이미 지난 시간은 신청할 수 없어요.";
   if(m.includes("ROOM_CLOSED"))return "이 방은 지금 사용 불가로 설정돼 있어요.";
   if(m.includes("BAD_TEAM"))return "없는 조예요. 조 이름을 확인해 주세요.";
@@ -393,6 +404,7 @@ if(LIVE){
     async loadMeta(){
       try{const {data,error}=await sb.rpc("list_teams");if(!error&&data)S.teamList=data.map(x=>typeof x==="string"?x:Object.values(x)[0])}catch(e){}
       const [r,s,k]=await Promise.all([sb.from("rooms").select("*"),sb.from("settings").select("*").eq("key","notice"),sb.from("blocks").select("*").gte("date",addDays(ymd(),-1)).order("date").order("start_min")]);
+      try{const od=await sb.from("open_dates").select("*").gte("date",ymd());if(!od.error)S.openDates=od.data}catch(e){}
       if(!k.error)S.blocks=k.data.map(x=>({id:x.id,date:x.date,start:x.start_min,end:x.end_min,reason:x.reason||"",rooms:x.rooms&&x.rooms.length?x.rooms:ROOMS.slice()}));
       if(!r.error)S.rooms=Object.fromEntries(r.data.map(x=>[x.room,x]));
       if(!s.error)S.notice=(s.data[0]&&s.data[0].value)||"";
@@ -408,7 +420,7 @@ if(LIVE){
     subscribe(){
       let t;const refresh=()=>{clearTimeout(t);t=setTimeout(async()=>{try{await Promise.all([api.loadBookings(),api.loadKits(),api.loadMeta()]);render()}catch(e){}},150)};
       const ch=sb.channel("osce");
-      ["bookings","kits","rooms","settings","blocks"].forEach(tb=>ch.on("postgres_changes",{event:"*",schema:"public",table:tb},refresh));
+      ["bookings","kits","rooms","settings","blocks","open_dates"].forEach(tb=>ch.on("postgres_changes",{event:"*",schema:"public",table:tb},refresh));
       ch.subscribe();
       document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
     }
@@ -510,7 +522,7 @@ function renderAuth(){
   $("layout").classList.toggle("can-book",canAct());
   $("layout").classList.toggle("locked",!bookable);
   $("gridFoot").textContent=!canAct()?"칸을 누르면 신청 내용을 볼 수 있어요."
-    :!bookable?(S.sel<ymd()?"지난 날짜는 신청할 수 없어요.":`이 날은 아직 신청이 열리지 않았어요. ${md(addDays(S.sel,-AHEAD-1))} 밤 10시에 열려요.`)
+    :!bookable?(S.sel<ymd()?"지난 날짜는 신청할 수 없어요.":`이 날은 아직 신청이 열리지 않았어요. ${whenText(openTimeFor(S.sel))}에 열려요.`)
     :isAdmin()?"빈칸을 누르면 조를 골라 대리 신청할 수 있어요. 신청 칸을 누르면 어느 조 신청이든 취소할 수 있어요."
     :"빈칸을 누르면 그 방·그 시간으로 신청 창이 열려요. 테두리가 진한 칸이 우리 조 신청이에요.";
   const nb=$("newBtn");if(nb)nb.onclick=()=>openForm({});
@@ -518,8 +530,8 @@ function renderAuth(){
   const wb=$("whoBtn");if(wb)wb.onclick=isAdmin()?openAdmin:openAccount;
 }
 function renderNotices(){
-  const last=lastBookable(),late=new Date().getHours()>=ROLLOVER;
-  let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">예약은 <b>오늘부터 2일 후까지</b>, <b>조당 하루 2회</b>까지 가능해요. 지금은 <b>${md(last)}까지</b> 신청할 수 있고, ${late?`내일 밤 10시에 ${md(nextOpenDate())}이 열려요.`:`오늘 밤 10시에 ${md(nextOpenDate())}이 열려요.`}</div></div>`;
+  const last=lastBookable(),nx=nextOpen();
+  let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">매일 <b>21:00에 다음 날</b> 신청이 열리고, <b>조당 하루 2회</b>까지 가능해요. 지금은 <b>${md(last)}까지</b> 신청할 수 있고, <b>${whenText(nx.at)}</b>에 ${md(nx.date)}이 열려요.</div></div>`;
   const ups=S.blocks.filter(k=>k.date>ymd()||(k.date===ymd()&&k.end>nowMin())).sort((a,b)=>a.date.localeCompare(b.date)||a.start-b.start).slice(0,4);
   if(ups.length)h=`<div class="ntc block"><span class="tag">사용 금지</span><div class="body">${ups.map(k=>`<b>${md(k.date)} ${fmt(k.start)}–${fmt(k.end)} · ${roomsLabel(k.rooms)}</b>${k.reason?" · "+esc(k.reason):""}`).join("<br>")}</div></div>`+h;
   if(S.notice.trim())h=`<div class="ntc admin"><span class="tag">공지</span><div class="body">${esc(S.notice.trim())}</div></div>`+h;
@@ -940,7 +952,7 @@ function render(){syncTeams();renderAuth();renderNotices();renderTop();renderGri
   const g=document.querySelector(".grid"),target=(Math.min(Math.max(nowMin(),OPEN),CLOSE)-OPEN)/60*hourPx()-hourPx();
   if(g&&target>240)window.scrollTo({top:g.getBoundingClientRect().top+window.scrollY+target-140,behavior:"auto"});
   api.subscribe();
-  setInterval(()=>{renderNotices();renderKits();if(S.sel===ymd())renderGrid()},60000);
+  setInterval(()=>{renderAuth();renderNotices();renderTop();renderKits();if(S.sel===ymd())renderGrid()},60000);
 })();
 })();
 </script>
