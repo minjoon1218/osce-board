@@ -738,7 +738,9 @@ function openAdmin(){
         <input id="xContent" placeholder="연습 내용 (선택)" aria-label="연습 내용">
       </div>
       <div class="adm-row"><span class="hint">방</span><div class="tg" id="xRoom">${ROOMS.map(x=>`<button type="button" data-r="${x}" aria-pressed="${x===1}">${x}</button>`).join("")}</div></div>
-      <div class="adm-row"><span class="hint">요일</span><div class="tg wk" id="xDays">${[1,2,3,4,5,6,0].map(w=>`<button type="button" data-w="${w}" aria-pressed="${w>=1&&w<=5}">${WD[w]}</button>`).join("")}</div></div>
+      <div class="adm-row"><span class="hint">반복</span>
+        <div class="tg" id="xMode"><button type="button" data-m="daily" aria-pressed="false">기간 내 매일</button><button type="button" data-m="week" aria-pressed="true">요일 선택</button></div></div>
+      <div class="adm-row" id="xDaysRow"><span class="hint">요일</span><div class="tg wk" id="xDays">${[1,2,3,4,5,6,0].map(w=>`<button type="button" data-w="${w}" aria-pressed="${w>=1&&w<=5}">${WD[w]}</button>`).join("")}</div></div>
       <div class="three"><span class="hint" style="align-self:center">시간</span><input type="time" id="xStart" step="1800" value="09:00" aria-label="시작"><input type="time" id="xEnd" step="1800" value="11:00" aria-label="끝"></div>
       <div class="three"><span class="hint" style="align-self:center">기간</span><input type="date" id="xFrom" value="${addDays(ymd(),1)}" aria-label="시작 날짜"><input type="date" id="xTo" value="${addDays(ymd(),28)}" aria-label="끝 날짜"></div>
       <div class="chips" id="xKits">${KITS.map(([k,n])=>`<button type="button" class="chip" data-k="${k}" aria-pressed="false">${n}</button>`).join("")}</div>
@@ -777,10 +779,12 @@ function openAdmin(){
     <button class="btn" type="button" id="logout">로그아웃</button>`;
   const xTog=(id,multi)=>{$(id).onclick=e=>{const b=e.target.closest("button");if(!b)return;
     if(multi)b.setAttribute("aria-pressed",b.getAttribute("aria-pressed")!=="true");else $(id).querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b))}};
-  xTog("xRoom",false);xTog("xDays",true);xTog("xKits",true);
+  xTog("xRoom",false);xTog("xDays",true);xTog("xKits",true);xTog("xMode",false);
+  $("xMode").addEventListener("click",()=>{const daily=$("xMode").querySelector('[aria-pressed="true"]').dataset.m==="daily";$("xDaysRow").hidden=daily});
+  const dayLabel=ws=>{const a=(ws||[]).slice().sort((x,y)=>((x+6)%7)-((y+6)%7));return a.length===7?"매일":a.join()==="1,2,3,4,5"?"평일":a.map(w=>WD[w]).join("")};
   const xList=()=>{const list=(S.fixed||[]);
     $("xList").innerHTML=list.length?list.map(f=>{const left=S.bookings.filter(b=>b.fixed===f.id&&b.date>=ymd()).length;
-      return `<div class="fx-item" style="${palette(f.team)}"><div class="top"><span><b>${esc(f.team)}조</b> · ${f.room}번 방 · ${(f.weekdays||[]).slice().sort((a,b)=>((a+6)%7)-((b+6)%7)).map(w=>WD[w]).join("")} · <span class="mono">${fmt(f.start_min)}–${fmt(f.end_min)}</span></span><button class="btn sm" type="button" data-xdel="${f.id}">삭제</button></div>
+      return `<div class="fx-item" style="${palette(f.team)}"><div class="top"><span><b>${esc(f.team)}조</b> · ${f.room}번 방 · ${dayLabel(f.weekdays)} · <span class="mono">${fmt(f.start_min)}–${fmt(f.end_min)}</span></span><button class="btn sm" type="button" data-xdel="${f.id}">삭제</button></div>
         <span class="hint">${md(f.date_from)}–${md(f.date_to)} · 남은 ${left}회${(f.kit_types||[]).length?" · 재료 "+f.kit_types.map(k=>KITSHORT[k]||k).join("·"):""}${f.content?" · "+esc(f.content):""}</span></div>`}).join(""):`<span class="hint">등록된 고정 시간대가 없어요.</span>`;
     $("xList").querySelectorAll("[data-xdel]").forEach(b=>b.onclick=()=>{
       const box=b.closest(".fx-item");if(box.querySelector(".alert"))return;
@@ -790,7 +794,7 @@ function openAdmin(){
     })};
   xList();
   $("xAdd").onclick=async()=>{const m=$("xMsg"),pick=id=>[...$(id).querySelectorAll('[aria-pressed="true"]')];
-    const v={team:$("xTeam").value.trim().replace(/[조팀]$/,"").toUpperCase(),room:Number(pick("xRoom")[0].dataset.r),days:pick("xDays").map(b=>Number(b.dataset.w)),
+    const v={team:$("xTeam").value.trim().replace(/[조팀]$/,"").toUpperCase(),room:Number(pick("xRoom")[0].dataset.r),days:pick("xMode")[0].dataset.m==="daily"?[0,1,2,3,4,5,6]:pick("xDays").map(b=>Number(b.dataset.w)),
       start:toMin($("xStart").value||"00:00"),end:toMin($("xEnd").value||"00:00"),from:$("xFrom").value,to:$("xTo").value,kits:pick("xKits").map(b=>b.dataset.k),content:$("xContent").value.trim()};
     if(!v.team){m.className="msg err";m.textContent="조를 적어 주세요.";$("xTeam").focus();return}
     if(v.end<=v.start||v.start<OPEN||v.end>CLOSE){m.className="msg err";m.textContent=errText(new Error("BAD_RANGE"));return}
