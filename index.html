@@ -468,7 +468,7 @@ if(LIVE){
       if(w.role!=="admin"&&(db.blocks||[]).some(k=>k.date===b.date&&overlap(k,b)))throw new Error("BLOCKED");
       if(db.bookings.some(x=>x.date===b.date&&x.room===b.room&&overlap(x,b)))throw new Error("23P01");
       if(w.role!=="admin"&&db.bookings.filter(x=>x.date===b.date&&x.team===team&&!x.fixed).length>=2)throw new Error("DAILY_LIMIT");
-      if(db.bookings.some(x=>x.date===b.date&&x.team===team&&overlap(x,b)))throw new Error("TEAM_BUSY");
+      if(w.role!=="admin"&&db.bookings.some(x=>x.date===b.date&&x.team===team&&overlap(x,b)))throw new Error("TEAM_BUSY");
       const r={...b,team,id:"d"+Date.now()};db.bookings.push(r);save();S.bookings=db.bookings.slice();return r;
     },
     async adjust(id,delta){const b=db.bookings.find(x=>x.id===id);if(!b)throw new Error("NOT_FOUND");
@@ -517,7 +517,7 @@ function adjCheck(b,delta,code){
   if(ne>CLOSE)return R("CLOSE_TIME","22시 마감");
   if(ne-b.start>MAXLEN)return R("TOO_LONG","최대 3시간");
   if(S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&o.room===b.room&&overlap(o,add)))return R("23P01","다음 신청 있음");
-  if(S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&o.team===b.team&&overlap(o,add)))return R("TEAM_BUSY","조 일정 겹침");
+  if(!adm&&S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&o.team===b.team&&overlap(o,add)))return R("TEAM_BUSY","조 일정 겹침");
   if((b.kits||[]).length&&S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&(o.kits||[]).some(k=>b.kits.includes(k))&&overlap(o,add)))return R("KIT_TAKEN","재료 겹침");
   if(!adm&&blockAt(add,b.room))return R("BLOCKED","사용 금지 시간");
   if(!adm&&!roomInfo(b.room).open)return R("ROOM_CLOSED","방 사용 불가");
@@ -881,14 +881,14 @@ function drawForm(){
   ${(roomClosed||clash.length||blocked)?(freeAlt.length?`<div class="hint">비어 있는 방: ${freeAlt.map(x=>`<button class="btn sm" type="button" data-room="${x}">${x}번</button>`).join(" ")}</div>`:`<div class="hint">이 시간엔 쓸 수 있는 방이 없어요. 시간을 바꿔 주세요.</div>`):""}
   ${blk?`<div class="alert"><div><b>${fmt(blk.start)}–${fmt(blk.end)}은 ${d.room}번 방 사용 금지 시간이에요.</b>${blk.reason?" ("+esc(blk.reason)+")":""}${isAdmin()?" 관리자라서 신청은 가능해요.":" 다른 시간을 골라 주세요."}</div></div>`:""}
   ${used2?`<div class="alert"><div><b>${md(r.date)}에는 이미 ${DAILY}회 신청했어요.</b> 한 조는 하루 ${DAILY}회까지만 신청할 수 있어요. 다른 날짜를 골라 주세요.</div></div>`:isLeader()?`<div class="hint">이 날 우리 조 신청 ${teamCount(r.date,S.team)}/${DAILY}회</div>`:""}
-  ${teamBusy?`<div class="alert"><div><b>${esc(d.team)}조는 이 시간에 이미 ${teamBusy.room}번 방을 신청했어요.</b> (${fmt(teamBusy.start)}–${fmt(teamBusy.end)})</div></div>`:""}
+  ${teamBusy?`<div class="alert"><div><b>${esc(d.team)}조는 이 시간에 이미 ${teamBusy.room}번 방을 신청했어요.</b> (${fmt(teamBusy.start)}–${fmt(teamBusy.end)})${isAdmin()?" 관리자라서 방 하나 더 신청할 수 있어요.":""}</div></div>`:""}
   <label class="field"><span>연습내용</span><input id="fContent" value="${esc(d.content)}" placeholder="A형 모의고사"></label>
   <div class="field"><span>쓸 재료</span>
     <div class="chips" id="fKits">${KITS.map(([k,n])=>{const left=SETS.filter(s=>!used.has(k+"-"+s)).length;if(!left)d.kits.delete(k);
       return `<button type="button" class="chip" data-k="${k}" aria-pressed="${d.kits.has(k)}" ${left?"":"disabled title='이 시간대 2세트 모두 예약됨'"}>${n}${left===1?"<small>1세트 남음</small>":""}</button>`}).join("")}</div>
     <span class="hint">남는 세트(1 또는 2)로 자동 배정돼요.</span></div>
   <div class="msg" id="fMsg"></div>
-  <button class="btn primary" type="button" id="fSubmit" ${clash.length||teamBusy||roomClosed||used2||blocked?"disabled":""}>${d.room}번 방 · ${fmt(r.start)}–${fmt(r.end)} 신청</button>`;
+  <button class="btn primary" type="button" id="fSubmit" ${clash.length||(teamBusy&&!isAdmin())||roomClosed||used2||blocked?"disabled":""}>${d.room}번 방 · ${fmt(r.start)}–${fmt(r.end)} 신청</button>`;
   bindForm();
 }
 function readForm(){const d=S.draft;if(isAdmin())d.team=($("fTeam").value||"").trim().replace(/[조팀]$/,"").toUpperCase();d.day=$("fDay").value.trim();d.date=$("fDate").value||d.date;d.start=$("fStart").value||d.start;d.content=$("fContent").value.trim()}
