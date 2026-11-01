@@ -179,7 +179,7 @@ input,select{border:1px solid var(--line-strong);background:var(--surface);borde
 input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 input[readonly]{background:var(--sunk)}
 .seg{display:grid;gap:4px;background:var(--sunk);padding:3px;border-radius:10px}
-.seg.r6{grid-template-columns:repeat(6,1fr)} .seg.r2{grid-template-columns:1fr 1fr} .seg.r3{grid-template-columns:repeat(3,1fr)}
+.seg.r6{grid-template-columns:repeat(6,1fr)} .seg.r2{grid-template-columns:1fr 1fr} .seg.r3{grid-template-columns:repeat(3,1fr)} .added{border:1px solid var(--line,#ddd);border-radius:10px;padding:10px;display:grid;gap:8px;font-size:13px} .added-list{display:flex;flex-wrap:wrap;gap:6px}
 .seg button{padding:7px 0;border-radius:8px;font-weight:600;font-size:.86rem;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.1)}
 .seg button.taken:not([aria-pressed="true"]){color:var(--faint);text-decoration:line-through}
@@ -386,7 +386,7 @@ function errText(e){
   if(m.includes("DAILY_LIMIT"))return "한 조는 하루 2회까지만 신청할 수 있어요.";
   if(m.includes("TEAM_BUSY"))return "이 조는 이 시간에 이미 다른 방을 신청했어요.";
   if(m.includes("KIT_TAKEN"))return "방금 다른 조가 같은 재료 세트를 잡았어요. 재료를 다시 골라 주세요.";
-  if(m.includes("BAD_DURATION"))return "사용 시간은 1시간 또는 2시간만 고를 수 있어요.";
+  if(m.includes("BAD_DURATION"))return isAdmin()?"관리자 시간 설정이 DB에 아직 반영 안 됐어요. 업데이트 013 SQL을 실행해 주세요.":"사용 시간은 1시간 또는 2시간만 고를 수 있어요.";
   if(m.includes("TOO_FAR"))return `${md(lastBookable())}까지만 신청할 수 있어요. 매일 21:00에 다음 날이 열려요.`;
   if(m.includes("PAST"))return "이미 지난 시간은 신청할 수 없어요.";
   if(m.includes("ROOM_CLOSED"))return "이 방은 지금 사용 불가로 설정돼 있어요.";
@@ -541,7 +541,7 @@ function adjCheck(b,delta,code){
   }
   const add={date:b.date,start:b.end,end:ne};
   if(ne>CLOSE)return R("CLOSE_TIME","22시 마감");
-  if(ne-b.start>MAXLEN)return R("TOO_LONG","최대 3시간");
+  if(!adm&&ne-b.start>MAXLEN)return R("TOO_LONG","최대 3시간");
   if(S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&o.room===b.room&&overlap(o,add)))return R("23P01","다음 신청 있음");
   if(!adm&&S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&o.team===b.team&&overlap(o,add)))return R("TEAM_BUSY","조 일정 겹침");
   if((b.kits||[]).length&&S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&(o.kits||[]).some(k=>b.kits.includes(k))&&overlap(o,add)))return R("KIT_TAKEN","재료 겹침");
@@ -884,7 +884,7 @@ function openEdit(id){
 }
 const draftRange=()=>{const d=S.draft,s=toMin(d.start);return {date:d.date,start:s,end:s+d.dur,room:d.room}};
 function drawForm(){
-  const d=S.draft,r=draftRange(),ex=d.editId,durs=ex&&!DURS.includes(d.orig.end-d.orig.start)?[...DURS,d.orig.end-d.orig.start]:DURS;
+  const d=S.draft,r=draftRange(),ex=d.editId,adm=isAdmin(),durs=adm?[60,120,180]:ex&&!DURS.includes(d.orig.end-d.orig.start)?[...DURS,d.orig.end-d.orig.start]:DURS;
   const closedRooms=new Set(ROOMS.filter(x=>!roomInfo(x).open));
   const blockedRooms=new Set(isAdmin()?[]:ROOMS.filter(x=>blockAt(r,x)));
   const taken=new Set(ROOMS.filter(x=>roomTaken(r,x,ex).length||closedRooms.has(x)||blockedRooms.has(x)));
@@ -895,6 +895,9 @@ function drawForm(){
   const roomClosed=closedRooms.has(d.room);
   const minD=isAdmin()?"":ymd(),maxD=isAdmin()?"":lastBookable();
   $("drawerBody").innerHTML=`
+  ${!ex&&(d.added||[]).length?`<div class="added"><b>방금 넣은 신청 ${d.added.length}건</b> · 이어서 바로 추가할 수 있어요
+    <div class="added-list">${d.added.map(id=>{const b=S.bookings.find(x=>x.id===id);return b?`<button type="button" class="btn sm" data-open="${b.id}">${esc(b.team)}조 ${md(b.date)} ${b.room}번 ${fmt(b.start)}–${fmt(b.end)}</button>`:""}).join("")}</div>
+    <button type="button" class="btn sm ghost" id="fDone">다 넣었어요 · 닫기</button></div>`:""}
   ${ex?`<div class="hint">지금: ${d.orig.room}번 방 · ${md(d.orig.date)} ${fmt(d.orig.start)}–${fmt(d.orig.end)}. 바꿀 것만 고치고 저장하세요.</div>`:""}
   <div class="field" ${ex?"hidden":""}><span>카톡 양식 붙여넣기 (선택)</span>
     <div class="paste"><input id="fPaste" placeholder="3일차 c조 10/15 오전 9시 3번방 a형 모의고사"><button class="btn sm" type="button" id="fParse">채우기</button></div></div>
@@ -908,7 +911,9 @@ function drawForm(){
     <label class="field"><span>시작</span><input id="fStart" type="time" step="1800" value="${d.start}"></label>
   </div>
   <div class="field"><span>사용 시간</span>
-    <div class="seg r${durs.length}" id="fDur">${durs.map(m=>`<button type="button" data-dur="${m}" aria-pressed="${m===d.dur}">${m/60}시간<small>~${fmt(r.start+m)}</small></button>`).join("")}</div></div>
+    <div class="seg r${durs.length}" id="fDur">${durs.map(m=>`<button type="button" data-dur="${m}" aria-pressed="${m===d.dur}">${m/60}시간<small>~${fmt(r.start+m)}</small></button>`).join("")}</div>
+    ${adm?`<div class="two" style="margin-top:6px"><label class="field"><span>끝나는 시간 (관리자 · 30분 단위)</span><input id="fEnd" type="time" step="1800" value="${fmt(r.end)}"></label>
+      <div class="field"><span>&nbsp;</span><div class="hint" style="padding-top:8px">${d.dur%60?Math.floor(d.dur/60)+"시간 30분":d.dur/60+"시간"} 사용</div></div></div>`:""}</div>
   <div class="field"><span>방</span>
     <div class="seg r6">${ROOMS.map(x=>`<button type="button" data-room="${x}" aria-pressed="${x===d.room}" class="${taken.has(x)?"taken":""}" title="${closedRooms.has(x)?"사용 불가":roomTaken(r,x,ex).length?"이 시간에 이미 신청 있음":""}${roomInfo(x).thomas?"":" · 토마스 없음"}">${x}</button>`).join("")}</div>
     <span class="hint">${ROOMS.filter(x=>!roomInfo(x).thomas).length?`토마스 없는 방: ${ROOMS.filter(x=>!roomInfo(x).thomas).map(x=>x+"번").join(", ")}`:"모든 방에 토마스가 있어요."}</span></div>
@@ -931,6 +936,10 @@ function drawForm(){
 function readForm(){const d=S.draft;if(isAdmin())d.team=($("fTeam").value||"").trim().replace(/[조팀]$/,"").toUpperCase();d.day=$("fDay").value.trim();d.date=$("fDate").value||d.date;d.start=$("fStart").value||d.start;d.content=$("fContent").value.trim()}
 function bindForm(){
   ["fDate","fStart"].forEach(id=>$(id).addEventListener("change",()=>{readForm();drawForm()}));
+  if($("fEnd"))$("fEnd").addEventListener("change",()=>{readForm();const e=toMin($("fEnd").value||"00:00"),st=toMin(S.draft.start);
+    if(!$("fEnd").value||e-st<30||(e-st)%30){drawForm();setMsg("끝나는 시간은 시작보다 30분 이상 뒤, 30분 단위로 골라 주세요.","err");return}
+    if(e>CLOSE){drawForm();setMsg("22:00까지만 쓸 수 있어요.","err");return}
+    S.draft.dur=e-st;drawForm()});
   if(isAdmin())$("fTeam").addEventListener("change",()=>{readForm();drawForm()});
   $("drawerBody").querySelectorAll("[data-room]").forEach(b=>b.onclick=()=>{readForm();S.draft.room=Number(b.dataset.room);drawForm()});
   $("fDur").onclick=e=>{const b=e.target.closest("[data-dur]");if(!b)return;readForm();S.draft.dur=Number(b.dataset.dur);drawForm()};
@@ -945,6 +954,8 @@ function bindForm(){
   $("fPaste").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();$("fParse").click()}};
   $("fSubmit").onclick=submit;
   if($("fBack"))$("fBack").onclick=()=>openDetail(S.draft.editId);
+  $("drawerBody").querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>openDetail(b.dataset.open));
+  if($("fDone"))$("fDone").onclick=closeDrawer;
 }
 function setMsg(t,c){const m=$("fMsg");if(m){m.textContent=t;m.className="msg "+(c||"")}}
 async function submit(){
@@ -965,7 +976,14 @@ async function submit(){
     const v={date:r.date,room:d.room,start:r.start,end:r.end,day:d.day,content:d.content,kits,team:isAdmin()?d.team:null};
     const b=ex?await api.update(ex,v):await api.add(v);
     if(!ex){store("osce-day",d.day);if(isAdmin())store("osce-admin-team",d.team)}
-    putLocal(b);S.sel=r.date;render();openDetail(b.id,!ex);if(ex)toast("신청 내용을 바꿨어요");syncSoon();
+    putLocal(b);S.sel=r.date;render();syncSoon();
+    if(isAdmin()&&!ex){
+      /* 관리자: 창을 닫지 않고 바로 다음 신청 — 같은 시간의 다음 빈 방으로 옮겨 둠 */
+      d.added=[...(d.added||[]),b.id];d.kits=new Set();
+      const nr=draftRange(),free=ROOMS.filter(x=>roomInfo(x).open&&!roomTaken(nr,x).length);
+      d.room=free.find(x=>x>d.room)||free[0]||d.room;
+      drawForm();setMsg(`${b.team}조 ${b.room}번 방 ${fmt(b.start)}–${fmt(b.end)} 넣었어요. 조·시간·방 바꿔서 바로 추가하세요.`,"good");
+    }else{openDetail(b.id,!ex);if(ex)toast("신청 내용을 바꿨어요")}
   }catch(err){setMsg(errText(err),"err");$("fSubmit").disabled=false;try{await api.loadBookings();render()}catch(e){}}
 }
 
