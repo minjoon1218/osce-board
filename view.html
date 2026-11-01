@@ -232,6 +232,9 @@ h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
   .kit .sets{display:flex;gap:3px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+html,body{overflow-x:clip;max-width:100%}
+@supports not (overflow-x:clip){body{overflow-x:hidden}}
+@media (max-width:700px){input,select,textarea{font-size:16px}}
 </style>
 </head>
 <body>

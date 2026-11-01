@@ -171,11 +171,19 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .drawer.on{transform:none}
 .dh{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
 .dh h2{margin:0;font-size:1rem}
-.db{overflow-y:auto;padding:18px;display:grid;gap:14px;align-content:start}
+.db{overflow-y:auto;overflow-x:hidden;padding:18px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-content:start;min-width:0}
 .field{display:grid;gap:5px}
 .field>span{font-size:.76rem;font-weight:600;color:var(--muted)}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 input,select{border:1px solid var(--line-strong);background:var(--surface);border-radius:9px;padding:8px 10px;font-size:.92rem;width:100%;min-width:0}
+/* 모바일 좌우 흔들림 방지: iOS 날짜·시간 칸이 칸 너비를 넘지 않게 */
+html,body{overflow-x:clip;max-width:100%}
+@supports not (overflow-x:clip){body{overflow-x:hidden}}
+input[type=date],input[type=time]{-webkit-appearance:none;appearance:none;display:block;min-height:38px;max-width:100%;text-align:left}
+input::-webkit-date-and-time-value{text-align:left}
+.field{min-width:0}
+/* iPhone은 16px보다 작은 입력칸을 누르면 화면을 확대해서 좌우로 밀림 */
+@media (max-width:700px){input,select,textarea{font-size:16px}}
 input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 input[readonly]{background:var(--sunk)}
 .seg{display:grid;gap:4px;background:var(--sunk);padding:3px;border-radius:10px}
@@ -220,7 +228,7 @@ dl.info dt{color:var(--muted)} dl.info dd{margin:0;min-width:0;overflow-wrap:any
 .ntc.block .tag{background:var(--out);color:#fff}
 .blk-list{display:grid;gap:6px}
 .blk-item{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:.84rem}
-.three{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px}
+.three{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:8px}
 .chk{display:flex;align-items:center;gap:8px;font-size:.84rem}
 .chk input{width:auto}
 .notices{display:grid;gap:8px}
@@ -251,6 +259,17 @@ dl.info dt{color:var(--muted)} dl.info dd{margin:0;min-width:0;overflow-wrap:any
 textarea{font:inherit;color:inherit;border:1px solid var(--line-strong);background:var(--surface);border-radius:9px;padding:8px 10px;font-size:.92rem;width:100%;min-height:90px;resize:vertical}
 textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 @media (max-width:440px){.brand h1{display:none}}
+/* 폰: 방 6개를 화면 폭에 맞춰서 좌우 스크롤 없이 */
+@media (max-width:640px){
+  .grid{grid-template-columns:30px repeat(6,minmax(0,1fr));min-width:0}
+  .grid-scroll{overflow-x:hidden}
+  .times span{right:4px;font-size:.6rem}
+  .gh{padding:8px 2px 7px}.gh .rn{font-size:.8rem}.gh .rs{font-size:.6rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bk{left:2px;right:2px;padding:3px 4px;border-left-width:3px;font-size:.68rem;line-height:1.2;border-radius:6px}
+  .bk .t{font-size:.58rem;overflow-wrap:anywhere}
+  .bk.mine b::after{display:none}
+  .slot-ghost{left:2px;right:2px;padding:2px 3px;font-size:.62rem}
+}
 @media (max-width:640px){.brand h1{font-size:.98rem}.datelabel{min-width:7.4em}.bar-in{gap:8px}.newlabel{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
