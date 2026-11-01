@@ -342,15 +342,21 @@ if(LIVE){
   };
   subscribe=()=>{
     let t;const refresh=()=>{clearTimeout(t);t=setTimeout(()=>load().then(async()=>{if(S.histOpen){try{await loadPast()}catch(e){}}render()}).catch(()=>setLive("off")),150)};
-    sb.channel("osce-view")
-      .on("postgres_changes",{event:"*",schema:"public",table:"bookings"},refresh)
-      .on("postgres_changes",{event:"*",schema:"public",table:"kits"},refresh)
-      .on("postgres_changes",{event:"*",schema:"public",table:"rooms"},refresh)
-      .on("postgres_changes",{event:"*",schema:"public",table:"settings"},refresh)
-      .on("postgres_changes",{event:"*",schema:"public",table:"blocks"},refresh)
-      .subscribe(st=>{if(st==="SUBSCRIBED")setLive("on");else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT"||st==="CLOSED")setLive("off")});
-    document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
-    setInterval(refresh,5*60*1000);
+    let ch=null,retry=0,rt;
+    const connect=()=>{
+      if(ch){try{sb.removeChannel(ch)}catch(e){}}
+      ch=sb.channel("osce-view-"+Date.now());
+      ["bookings","kits","rooms","settings","blocks"].forEach(tb=>ch.on("postgres_changes",{event:"*",schema:"public",table:tb},refresh));
+      ch.subscribe(st=>{
+        if(st==="SUBSCRIBED"){setLive("on");if(retry)refresh();retry=0}
+        else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT"||st==="CLOSED"){setLive("off");clearTimeout(rt);rt=setTimeout(connect,Math.min(30000,1000*2**Math.min(retry++,5)))}
+      });
+    };
+    connect();
+    const wake=()=>{if(document.hidden)return;refresh();if(!ch||ch.state!=="joined"){retry=retry||1;connect()}};
+    document.addEventListener("visibilitychange",wake);
+    window.addEventListener("focus",wake);window.addEventListener("online",wake);window.addEventListener("pageshow",wake);
+    setInterval(()=>{if(!document.hidden)refresh()},30000);
   };
 }else{
   load=async()=>{const t=ymd(),n=nowMin(),r30=m=>Math.max(OPEN,Math.min(CLOSE-120,Math.floor(m/30)*30));
