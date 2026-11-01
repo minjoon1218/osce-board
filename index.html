@@ -489,7 +489,7 @@ if(LIVE){
       if(db.bookings.some(x=>x.date===b.date&&x.room===b.room&&overlap(x,b)))throw new Error("23P01");
       if(w.role!=="admin"&&db.bookings.filter(x=>x.date===b.date&&x.team===team&&!x.fixed).length>=2)throw new Error("DAILY_LIMIT");
       if(w.role!=="admin"&&db.bookings.some(x=>x.date===b.date&&x.team===team&&overlap(x,b)))throw new Error("TEAM_BUSY");
-      const r={...b,team,id:"d"+Date.now()};db.bookings.push(r);save();S.bookings=db.bookings.slice();return r;
+      const r={...b,team,id:"d"+Date.now()+"-"+Math.random().toString(36).slice(2,6)};db.bookings.push(r);save();S.bookings=db.bookings.slice();return r;
     },
     async update(id,nb){const b=db.bookings.find(x=>x.id===id);if(!b)throw new Error("NOT_FOUND");const w=who(S.code);if(!w)throw new Error("NOT_LEADER");
       const team=w.role==="admin"?String(nb.team||b.team).toUpperCase():w.team;if(w.role!=="admin"&&b.team!==w.team)throw new Error("NOT_YOURS");
@@ -871,6 +871,7 @@ function openForm(pre={}){
   const date=pre.date||S.sel;
   if(!dateBookable(date)){toast(`${md(lastBookable())}까지만 신청할 수 있어요`);return}
   S.draft={team:isAdmin()?(store("osce-admin-team")||""):S.team,day:pre.day??store("osce-day")??"",date,room:pre.room||1,start:pre.start||"09:00",dur:DURS.includes(pre.dur)?pre.dur:120,content:pre.content||"",kits:new Set()};
+  if(isAdmin())S.draft.rooms=new Set([S.draft.room]);
   openDrawer(isAdmin()?"대리 신청 (관리자)":"연습 신청",{form:true});drawForm();
 }
 /* 신청 변경: 신청 폼을 기존 내용으로 채워서 엶 */
@@ -893,6 +894,9 @@ function drawForm(){
   const used2=isLeader()&&!(ex&&d.orig.fixed)&&teamCount(r.date,S.team,ex)>=DAILY;
   const blk=blockAt(r,d.room),blocked=blk&&!isAdmin();
   const roomClosed=closedRooms.has(d.room);
+  /* 관리자 새 신청: 방 여러 개 선택 */
+  const multi=adm&&!ex&&!!d.rooms,sel=multi?[...d.rooms].sort((a,b)=>a-b):[d.room];
+  const badSel=multi?sel.filter(x=>closedRooms.has(x)||roomTaken(r,x).length):[];
   const minD=isAdmin()?"":ymd(),maxD=isAdmin()?"":lastBookable();
   $("drawerBody").innerHTML=`
   ${!ex&&(d.added||[]).length?`<div class="added"><b>방금 넣은 신청 ${d.added.length}건</b> · 이어서 바로 추가할 수 있어요
@@ -914,22 +918,24 @@ function drawForm(){
     <div class="seg r${durs.length}" id="fDur">${durs.map(m=>`<button type="button" data-dur="${m}" aria-pressed="${m===d.dur}">${m/60}시간<small>~${fmt(r.start+m)}</small></button>`).join("")}</div>
     ${adm?`<div class="two" style="margin-top:6px"><label class="field"><span>끝나는 시간 (관리자 · 30분 단위)</span><input id="fEnd" type="time" step="1800" value="${fmt(r.end)}"></label>
       <div class="field"><span>&nbsp;</span><div class="hint" style="padding-top:8px">${d.dur%60?Math.floor(d.dur/60)+"시간 30분":d.dur/60+"시간"} 사용</div></div></div>`:""}</div>
-  <div class="field"><span>방</span>
-    <div class="seg r6">${ROOMS.map(x=>`<button type="button" data-room="${x}" aria-pressed="${x===d.room}" class="${taken.has(x)?"taken":""}" title="${closedRooms.has(x)?"사용 불가":roomTaken(r,x,ex).length?"이 시간에 이미 신청 있음":""}${roomInfo(x).thomas?"":" · 토마스 없음"}">${x}</button>`).join("")}</div>
+  <div class="field"><span>방${multi?" (관리자 · 여러 개 선택 가능)":""}</span>
+    <div class="seg r6">${ROOMS.map(x=>`<button type="button" data-room="${x}" aria-pressed="${sel.includes(x)}" class="${taken.has(x)?"taken":""}" title="${closedRooms.has(x)?"사용 불가":roomTaken(r,x,ex).length?"이 시간에 이미 신청 있음":""}${roomInfo(x).thomas?"":" · 토마스 없음"}">${x}</button>`).join("")}</div>
     <span class="hint">${ROOMS.filter(x=>!roomInfo(x).thomas).length?`토마스 없는 방: ${ROOMS.filter(x=>!roomInfo(x).thomas).map(x=>x+"번").join(", ")}`:"모든 방에 토마스가 있어요."}</span></div>
-  ${roomClosed?`<div class="alert"><div><b>${d.room}번 방은 지금 사용 불가예요.</b>${roomInfo(d.room).memo?" ("+esc(roomInfo(d.room).memo)+")":""}</div></div>`:""}
-  ${!roomClosed&&clash.length?`<div class="alert"><div><b>${d.room}번 방은 이 시간에 이미 신청이 있어요.</b><br>${clash.map(b=>`${esc(teamLabel(b))} ${fmt(b.start)}–${fmt(b.end)}`).join("<br>")}</div></div>`:""}
-  ${(roomClosed||clash.length||blocked)?(freeAlt.length?`<div class="hint">비어 있는 방: ${freeAlt.map(x=>`<button class="btn sm" type="button" data-room="${x}">${x}번</button>`).join(" ")}</div>`:`<div class="hint">이 시간엔 쓸 수 있는 방이 없어요. 시간을 바꿔 주세요.</div>`):""}
-  ${blk?`<div class="alert"><div><b>${fmt(blk.start)}–${fmt(blk.end)}은 ${d.room}번 방 사용 금지 시간이에요.</b>${blk.reason?" ("+esc(blk.reason)+")":""}${isAdmin()?" 관리자라서 신청은 가능해요.":" 다른 시간을 골라 주세요."}</div></div>`:""}
+  ${multi&&!sel.length?`<div class="hint">방을 하나 이상 골라 주세요.</div>`:""}
+  ${multi&&badSel.length?`<div class="alert"><div><b>${badSel.join("·")}번 방은 이 시간에 쓸 수 없어요</b> (이미 신청 있음 또는 사용 불가). 선택을 빼 주세요.${freeAlt.length?`<br>비어 있는 방: ${freeAlt.join("·")}번`:""}</div></div>`:""}
+  ${!multi&&roomClosed?`<div class="alert"><div><b>${d.room}번 방은 지금 사용 불가예요.</b>${roomInfo(d.room).memo?" ("+esc(roomInfo(d.room).memo)+")":""}</div></div>`:""}
+  ${!multi&&!roomClosed&&clash.length?`<div class="alert"><div><b>${d.room}번 방은 이 시간에 이미 신청이 있어요.</b><br>${clash.map(b=>`${esc(teamLabel(b))} ${fmt(b.start)}–${fmt(b.end)}`).join("<br>")}</div></div>`:""}
+  ${!multi&&(roomClosed||clash.length||blocked)?(freeAlt.length?`<div class="hint">비어 있는 방: ${freeAlt.map(x=>`<button class="btn sm" type="button" data-room="${x}">${x}번</button>`).join(" ")}</div>`:`<div class="hint">이 시간엔 쓸 수 있는 방이 없어요. 시간을 바꿔 주세요.</div>`):""}
+  ${blk&&!multi?`<div class="alert"><div><b>${fmt(blk.start)}–${fmt(blk.end)}은 ${d.room}번 방 사용 금지 시간이에요.</b>${blk.reason?" ("+esc(blk.reason)+")":""}${isAdmin()?" 관리자라서 신청은 가능해요.":" 다른 시간을 골라 주세요."}</div></div>`:""}
   ${used2?`<div class="alert"><div><b>${md(r.date)}에는 이미 ${DAILY}회 신청했어요.</b> 한 조는 하루 ${DAILY}회까지만 신청할 수 있어요. 다른 날짜를 골라 주세요.</div></div>`:isLeader()?`<div class="hint">이 날 우리 조 신청 ${teamCount(r.date,S.team,ex)+(ex?1:0)}/${DAILY}회</div>`:""}
   ${teamBusy?`<div class="alert"><div><b>${esc(d.team)}조는 이 시간에 이미 ${teamBusy.room}번 방을 신청했어요.</b> (${fmt(teamBusy.start)}–${fmt(teamBusy.end)})${isAdmin()?" 관리자라서 방 하나 더 신청할 수 있어요.":""}</div></div>`:""}
   <label class="field"><span>연습내용</span><input id="fContent" value="${esc(d.content)}" placeholder="A형 모의고사"></label>
   <div class="field"><span>쓸 재료</span>
     <div class="chips" id="fKits">${KITS.map(([k,n])=>{const left=SETS.filter(s=>!used.has(k+"-"+s)).length;if(!left)d.kits.delete(k);
       return `<button type="button" class="chip" data-k="${k}" aria-pressed="${d.kits.has(k)}" ${left?"":"disabled title='이 시간대 2세트 모두 예약됨'"}>${n}${left===1?"<small>1세트 남음</small>":""}</button>`}).join("")}</div>
-    <span class="hint">남는 세트(1 또는 2)로 자동 배정돼요.</span></div>
+    <span class="hint">남는 세트(1 또는 2)로 자동 배정돼요.${multi&&sel.length>1?` 방마다 한 세트씩, 세트가 모자라면 앞 방부터 배정돼요.`:""}</span></div>
   <div class="msg" id="fMsg"></div>
-  <button class="btn primary" type="button" id="fSubmit" ${clash.length||(teamBusy&&!isAdmin())||roomClosed||used2||blocked?"disabled":""}>${d.room}번 방 · ${fmt(r.start)}–${fmt(r.end)} ${ex?"으로 변경":"신청"}</button>
+  <button class="btn primary" type="button" id="fSubmit" ${(multi?(!sel.length||badSel.length):(clash.length||(teamBusy&&!isAdmin())||roomClosed||used2||blocked))?"disabled":""}>${multi&&!sel.length?"방을 골라 주세요":`${multi?sel.join("·"):d.room}번 방 · ${fmt(r.start)}–${fmt(r.end)} ${ex?"으로 변경":multi&&sel.length>1?`신청 (${sel.length}건)`:"신청"}`}</button>
   ${ex?`<button class="btn ghost" type="button" id="fBack">변경 안 하고 돌아가기</button>`:""}`;
   bindForm();
 }
@@ -941,7 +947,8 @@ function bindForm(){
     if(e>CLOSE){drawForm();setMsg("22:00까지만 쓸 수 있어요.","err");return}
     S.draft.dur=e-st;drawForm()});
   if(isAdmin())$("fTeam").addEventListener("change",()=>{readForm();drawForm()});
-  $("drawerBody").querySelectorAll("[data-room]").forEach(b=>b.onclick=()=>{readForm();S.draft.room=Number(b.dataset.room);drawForm()});
+  $("drawerBody").querySelectorAll("[data-room]").forEach(b=>b.onclick=()=>{readForm();const n=Number(b.dataset.room),d=S.draft;
+    if(d.rooms&&!d.editId){d.rooms.has(n)?d.rooms.delete(n):d.rooms.add(n);d.room=[...d.rooms].sort((a,b)=>a-b)[0]||n}else d.room=n;drawForm()});
   $("fDur").onclick=e=>{const b=e.target.closest("[data-dur]");if(!b)return;readForm();S.draft.dur=Number(b.dataset.dur);drawForm()};
   $("fKits").onclick=e=>{const c=e.target.closest("[data-k]");if(!c||c.disabled)return;const k=c.dataset.k;S.draft.kits.has(k)?S.draft.kits.delete(k):S.draft.kits.add(k);c.setAttribute("aria-pressed",S.draft.kits.has(k))};
   $("fParse").onclick=()=>{const p=parseKakao($("fPaste").value);readForm();
@@ -950,7 +957,7 @@ function bindForm(){
     if(p.team){if(isAdmin())S.draft.team=p.team;else if(p.team!==S.team){note="다른 조 이름이 있었지만 신청은 우리 조로 들어가요.";cls="err"}}
     delete p.team;
     if(p.date&&!dateBookable(p.date)){note=`${md(p.date)}은 아직 신청할 수 없어서 날짜는 그대로 뒀어요.`;cls="err";delete p.date}
-    Object.assign(S.draft,p);drawForm();setMsg(note,cls)};
+    Object.assign(S.draft,p);if(p.room&&S.draft.rooms&&!S.draft.editId)S.draft.rooms=new Set([p.room]);drawForm();setMsg(note,cls)};
   $("fPaste").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();$("fParse").click()}};
   $("fSubmit").onclick=submit;
   if($("fBack"))$("fBack").onclick=()=>openDetail(S.draft.editId);
@@ -959,7 +966,9 @@ function bindForm(){
 }
 function setMsg(t,c){const m=$("fMsg");if(m){m.textContent=t;m.className="msg "+(c||"")}}
 async function submit(){
+  if(S.busy)return;
   readForm();const d=S.draft,r=draftRange();
+  if(isAdmin()&&!d.editId&&d.rooms)return submitMulti();
   if(isAdmin()&&!d.team){setMsg("어느 조로 신청할지 적어 주세요.","err");$("fTeam").focus();return}
   if(!isAdmin()&&blockAt(r,S.draft.room)){setMsg(errText(new Error("BLOCKED")),"err");return}
   const ex=d.editId;
@@ -971,20 +980,45 @@ async function submit(){
   const used=usedSets(r,ex),kits=[];
   for(const k of d.kits){const keep=ex&&(d.orig.kits||[]).find(x=>x.split("-")[0]===k&&!used.has(x));if(keep){kits.push(keep);continue}
     const s=SETS.find(s=>!used.has(k+"-"+s));if(!s){setMsg(KITNAME[k]+"는 이 시간대에 남는 세트가 없어요.","err");return}kits.push(k+"-"+s)}
-  $("fSubmit").disabled=true;
+  $("fSubmit").disabled=true;S.busy=true;
   try{
     const v={date:r.date,room:d.room,start:r.start,end:r.end,day:d.day,content:d.content,kits,team:isAdmin()?d.team:null};
     const b=ex?await api.update(ex,v):await api.add(v);
     if(!ex){store("osce-day",d.day);if(isAdmin())store("osce-admin-team",d.team)}
     putLocal(b);S.sel=r.date;render();syncSoon();
-    if(isAdmin()&&!ex){
-      /* 관리자: 창을 닫지 않고 바로 다음 신청 — 같은 시간의 다음 빈 방으로 옮겨 둠 */
-      d.added=[...(d.added||[]),b.id];d.kits=new Set();
-      const nr=draftRange(),free=ROOMS.filter(x=>roomInfo(x).open&&!roomTaken(nr,x).length);
-      d.room=free.find(x=>x>d.room)||free[0]||d.room;
-      drawForm();setMsg(`${b.team}조 ${b.room}번 방 ${fmt(b.start)}–${fmt(b.end)} 넣었어요. 조·시간·방 바꿔서 바로 추가하세요.`,"good");
-    }else{openDetail(b.id,!ex);if(ex)toast("신청 내용을 바꿨어요")}
+    openDetail(b.id,!ex);if(ex)toast("신청 내용을 바꿨어요");
   }catch(err){setMsg(errText(err),"err");$("fSubmit").disabled=false;try{await api.loadBookings();render()}catch(e){}}
+  finally{S.busy=false}
+}
+/* 관리자: 고른 방마다 한 건씩 신청, 창은 열어 둔 채 이어서 추가 */
+async function submitMulti(){
+  const d=S.draft,r=draftRange(),rooms=[...d.rooms].sort((a,b)=>a-b);
+  if(!d.team){setMsg("어느 조로 신청할지 적어 주세요.","err");$("fTeam").focus();return}
+  if(!rooms.length){setMsg("방을 하나 이상 골라 주세요.","err");return}
+  if(r.start<OPEN||r.end>CLOSE){setMsg("08:00–22:00 사이로만 신청할 수 있어요.","err");return}
+  if(rooms.some(x=>roomTaken(r,x).length||!roomInfo(x).open)){drawForm();return}
+  S.busy=true;$("fSubmit").disabled=true;
+  const used=usedSets(r),ok=[],fail=[],short=[];
+  for(const room of rooms){
+    const kits=[];
+    for(const k of d.kits){const s=SETS.find(s=>!used.has(k+"-"+s));if(s){kits.push(k+"-"+s);used.add(k+"-"+s)}else short.push(room+"번 "+KITSHORT[k])}
+    try{const b=await api.add({date:r.date,room,start:r.start,end:r.end,day:d.day,content:d.content,kits,team:d.team});putLocal(b);ok.push(b)}
+    catch(err){kits.forEach(k=>used.delete(k));fail.push(room+"번: "+errText(err))}
+  }
+  S.busy=false;
+  store("osce-day",d.day);store("osce-admin-team",d.team);
+  S.sel=r.date;render();syncSoon();
+  d.added=[...(d.added||[]),...ok.map(b=>b.id)];
+  if(ok.length){d.kits=new Set();
+    const free=ROOMS.filter(x=>roomInfo(x).open&&!roomTaken(r,x).length),last=Math.max(...ok.map(b=>b.room));
+    d.rooms=new Set(free.length?[free.find(x=>x>last)||free[0]]:[]);d.room=[...d.rooms][0]||d.room}
+  drawForm();
+  const parts=[];
+  if(ok.length)parts.push(`${d.team}조 ${ok.map(b=>b.room).join("·")}번 방 ${fmt(r.start)}–${fmt(r.end)} 넣었어요.`);
+  if(short.length)parts.push(`재료 세트 모자람: ${short.join(", ")}`);
+  if(fail.length)parts.push(`못 넣은 방 — ${fail.join(" / ")}`);
+  if(ok.length&&!fail.length)parts.push("조·시간·방 바꿔서 바로 추가하세요.");
+  setMsg(parts.join(" "),fail.length||!ok.length?"err":"good");
 }
 
 /* ---- 상세 ---- */
@@ -1058,7 +1092,7 @@ function redrawDrawer(){
   if(v.detail){const b=S.bookings.find(x=>x.id===v.detail);
     if(!b){closeDrawer();toast("이 신청은 취소됐어요");return}
     if(!typing&&JSON.stringify(b)!==v.sig&&!$("cYes"))openDetail(v.detail)}
-  else if(v.form&&S.draft&&!typing){
+  else if(v.form&&S.draft&&!typing&&!S.busy){
     if(v.edit&&!S.bookings.some(x=>x.id===v.edit)){closeDrawer();toast("이 신청은 취소됐어요");return}
     const m0=$("fMsg"),msg=m0&&m0.textContent,cls=m0&&m0.className.replace("msg","").trim();readForm();drawForm();if(msg)setMsg(msg,cls)}
 }
