@@ -456,6 +456,7 @@ if(LIVE){
     async delBlock(id){await rpc("admin_delete_block",{p_code:S.code,p_id:id})},
     async addFixed(v){return await rpc("admin_add_fixed",{p_code:S.code,p_team:v.team,p_room:v.room,p_weekdays:v.days,p_start:v.start,p_end:v.end,p_from:v.from,p_to:v.to,p_kit_types:v.kits,p_content:v.content})},
     async delFixed(id){return await rpc("admin_delete_fixed",{p_code:S.code,p_id:id})},
+    async setFixedPeriod(id,from,to){return await rpc("admin_set_fixed_period",{p_code:S.code,p_id:id,p_from:from,p_to:to})},
     async setKits(id,types,series){return await rpc("admin_set_kits",{p_code:S.code,p_id:id,p_kit_types:types,p_series:!!series})},
     async setRoom(r,v){await rpc("admin_set_room",{p_code:S.code,p_room:r,p_thomas:v.thomas,p_open:v.open,p_memo:v.memo||""})},
     subscribe(){
@@ -540,6 +541,14 @@ if(LIVE){
         const kits=[];for(const t of v.kits){const s=SETS.find(s=>!db.bookings.some(b=>b.date===d&&(b.kits||[]).includes(t+"-"+s)&&overlap(b,r)));if(s)kits.push(t+"-"+s)}
         db.bookings.push({id:"x"+Date.now()+n,date:d,room:v.room,start:v.start,end:v.end,day:"",team:v.team.toUpperCase(),content:v.content,kits,fixed:id});n++}
       save();S.bookings=db.bookings.slice();S.fixed=db.fixed.slice();return {id,created:n,notes}},
+    async setFixedPeriod(id,from,to){const f=(db.fixed||[]).find(x=>x.id===id);if(!f)throw new Error("NOT_FOUND");if(to<from)throw new Error("BAD_PERIOD");
+      const before=db.bookings.length;db.bookings=db.bookings.filter(b=>!(b.fixed===id&&b.date>=ymd()&&(b.date<from||b.date>to)));const removed=before-db.bookings.length;
+      f.date_from=from;f.date_to=to;let added=0;const notes=[];
+      for(const d of repeatDates(from>ymd()?from:ymd(),to,f.weekdays)){if(db.bookings.some(b=>b.fixed===id&&b.date===d))continue;
+        const r={date:d,start:f.start_min,end:f.end_min},hit=db.bookings.find(b=>b.date===d&&b.room===f.room&&overlap(b,r));
+        if(hit){notes.push({date:d,reason:hit.team+"조 신청과 겹침"});continue}
+        db.bookings.push({id:"x"+Date.now()+added,date:d,room:f.room,start:f.start_min,end:f.end_min,day:"",team:f.team,content:f.content||"",kits:[],fixed:id});added++}
+      save();S.bookings=db.bookings.slice();S.fixed=db.fixed.slice();return {added,removed,notes}},
     async delFixed(id){const n=db.bookings.filter(b=>b.fixed===id&&b.date>=ymd()).length;db.bookings=db.bookings.filter(b=>!(b.fixed===id&&b.date>=ymd()));db.fixed=(db.fixed||[]).filter(f=>f.id!==id);save();S.bookings=db.bookings.slice();S.fixed=db.fixed.slice();return n},
     async setKits(id,types,series){const b0=db.bookings.find(b=>b.id===id);const tg=db.bookings.filter(b=>b.id===id||(series&&b0.fixed&&b.fixed===b0.fixed&&b.date>=ymd()));const short=[];
       for(const b of tg){const keep=(b.kits||[]).filter(k=>types.includes(k.split("-")[0]));for(const t of types){if(keep.some(k=>k.split("-")[0]===t))continue;
@@ -796,6 +805,7 @@ function openAdmin(){
       <div class="adm-row" id="xDaysRow"><span class="hint">요일</span><div class="tg wk" id="xDays">${[1,2,3,4,5,6,0].map(w=>`<button type="button" data-w="${w}" aria-pressed="${w>=1&&w<=5}">${WD[w]}</button>`).join("")}</div></div>
       <div class="three"><span class="hint" style="align-self:center">시간</span><input type="time" id="xStart" step="1800" value="09:00" aria-label="시작"><input type="time" id="xEnd" step="1800" value="11:00" aria-label="끝"></div>
       <div class="three"><span class="hint" style="align-self:center">기간</span><input type="date" id="xFrom" value="${addDays(ymd(),1)}" aria-label="시작 날짜"><input type="date" id="xTo" value="${addDays(ymd(),28)}" aria-label="끝 날짜"></div>
+      <div class="adm-row"><span class="hint">빠른 선택</span><div class="chips" id="xPreset">${PRESETS.map(([n,t])=>`<button type="button" class="chip" data-preset="${n}" aria-pressed="${n===28}">${t}</button>`).join("")}</div></div>
       <div class="chips" id="xKits">${KITS.map(([k,n])=>`<button type="button" class="chip" data-k="${k}" aria-pressed="false">${n}</button>`).join("")}</div>
       <span class="hint">재료는 날짜마다 비어 있는 세트로 자동 배정돼요. 나중에 신청을 눌러 추가·변경할 수 있어요.</span>
       <div class="adm-row"><button class="btn primary sm" type="button" id="xAdd">고정 시간대 추가</button><span class="msg" id="xMsg"></span></div>
@@ -837,8 +847,25 @@ function openAdmin(){
   const dayLabel=ws=>{const a=(ws||[]).slice().sort((x,y)=>((x+6)%7)-((y+6)%7));return a.length===7?"매일":a.join()==="1,2,3,4,5"?"평일":a.map(w=>WD[w]).join("")};
   const xList=()=>{const list=(S.fixed||[]);
     $("xList").innerHTML=list.length?list.map(f=>{const left=S.bookings.filter(b=>b.fixed===f.id&&b.date>=ymd()).length;
-      return `<div class="fx-item" style="${palette(f.team)}"><div class="top"><span><b>${esc(f.team)}조</b> · ${f.room}번 방 · ${dayLabel(f.weekdays)} · <span class="mono">${fmt(f.start_min)}–${fmt(f.end_min)}</span></span><button class="btn sm" type="button" data-xdel="${f.id}">삭제</button></div>
+      return `<div class="fx-item" style="${palette(f.team)}"><div class="top"><span><b>${esc(f.team)}조</b> · ${f.room}번 방 · ${dayLabel(f.weekdays)} · <span class="mono">${fmt(f.start_min)}–${fmt(f.end_min)}</span></span><span style="display:flex;gap:4px"><button class="btn sm" type="button" data-xper="${f.id}">기간 변경</button><button class="btn sm" type="button" data-xdel="${f.id}">삭제</button></span></div>
         <span class="hint">${md(f.date_from)}–${md(f.date_to)} · 남은 ${left}회${(f.kit_types||[]).length?" · 재료 "+f.kit_types.map(k=>KITSHORT[k]||k).join("·"):""}${f.content?" · "+esc(f.content):""}</span></div>`}).join(""):`<span class="hint">등록된 고정 시간대가 없어요.</span>`;
+    $("xList").querySelectorAll("[data-xper]").forEach(b=>b.onclick=()=>{
+      const box=b.closest(".fx-item"),f=(S.fixed||[]).find(x=>x.id===b.dataset.xper);if(!f||box.querySelector(".per"))return;
+      box.insertAdjacentHTML("beforeend",`<div class="per" style="display:grid;gap:6px;margin-top:4px">
+        <div class="three"><span class="hint" style="align-self:center">새 기간</span><input type="date" data-pf value="${f.date_from}" aria-label="시작 날짜"><input type="date" data-pt value="${f.date_to}" aria-label="끝 날짜"></div>
+        <div class="adm-row"><span class="hint">끝 날짜 빠른 선택</span><div class="chips">${PRESETS.map(([n,t])=>`<button type="button" class="chip" data-pp="${n}">${t}</button>`).join("")}</div></div>
+        <div class="hint">늘리면 새 날짜에 신청이 추가되고, 줄이면 기간 밖의 오늘 이후 신청이 지워져요. 지난 기록은 그대로예요.</div>
+        <div class="adm-row"><button class="btn sm primary" type="button" data-psave>기간 저장</button><button class="btn sm ghost" type="button" data-pno>취소</button><span class="msg" data-pmsg></span></div></div>`);
+      const pf=box.querySelector("[data-pf]"),pt=box.querySelector("[data-pt]"),pm=box.querySelector("[data-pmsg]");
+      box.querySelectorAll("[data-pp]").forEach(c=>c.onclick=()=>{pt.value=addDays(pf.value||ymd(),Number(c.dataset.pp)-1)});
+      box.querySelector("[data-pno]").onclick=()=>xList();
+      box.querySelector("[data-psave]").onclick=async()=>{
+        if(!pf.value||!pt.value||pt.value<pf.value){pm.className="msg err";pm.textContent=errText(new Error("BAD_PERIOD"));return}
+        try{const r=await api.setFixedPeriod(f.id,pf.value,pt.value);await Promise.all([api.loadBookings(),api.loadMeta()]);render();xList();
+          const notes=r.notes||[];toast(`기간을 바꿨어요 · 추가 ${r.added}건 · 삭제 ${r.removed}건${notes.filter(n=>!n.created).length?` · 건너뜀 ${notes.filter(n=>!n.created).length}건`:""}`);
+          if(notes.length)$("xRes").innerHTML=`<div class="fx-res">${notes.map(n=>`${md(String(n.date))} ${n.created?"생성 · ":"건너뜀 · "}${esc(n.reason)}`).join("<br>")}</div>`;
+        }catch(e){pm.className="msg err";pm.textContent=errText(e)}};
+    });
     $("xList").querySelectorAll("[data-xdel]").forEach(b=>b.onclick=()=>{
       const box=b.closest(".fx-item");if(box.querySelector(".alert"))return;
       box.insertAdjacentHTML("beforeend",`<div class="alert"><div>오늘 이후 일정을 모두 지울까요? 지난 기록은 남아요.</div><div style="display:flex;gap:6px"><button class="btn sm primary" type="button" data-yes>삭제</button><button class="btn sm ghost" type="button" data-no>그대로 두기</button></div></div>`);
@@ -846,6 +873,9 @@ function openAdmin(){
       box.querySelector("[data-yes]").onclick=async()=>{try{const n=await api.delFixed(b.dataset.xdel);await Promise.all([api.loadBookings(),api.loadMeta()]);render();xList();toast(`고정 시간대를 지웠어요 · 신청 ${n}건 삭제`)}catch(e){toast(errText(e))}};
     })};
   xList();
+  $("xPreset").onclick=e=>{const c=e.target.closest("[data-preset]");if(!c)return;$("xTo").value=addDays($("xFrom").value||ymd(),Number(c.dataset.preset)-1);
+    $("xPreset").querySelectorAll("[data-preset]").forEach(x=>x.setAttribute("aria-pressed",x===c))};
+  ["xFrom","xTo"].forEach(id=>$(id).addEventListener("change",()=>$("xPreset").querySelectorAll("[data-preset]").forEach(x=>x.setAttribute("aria-pressed",$("xTo").value===addDays($("xFrom").value,Number(x.dataset.preset)-1)))));
   $("xAdd").onclick=async()=>{const m=$("xMsg"),pick=id=>[...$(id).querySelectorAll('[aria-pressed="true"]')];
     const v={team:$("xTeam").value.trim().replace(/[조팀]$/,"").toUpperCase(),room:Number(pick("xRoom")[0].dataset.r),days:pick("xMode")[0].dataset.m==="daily"?[0,1,2,3,4,5,6]:pick("xDays").map(b=>Number(b.dataset.w)),
       start:toMin($("xStart").value||"00:00"),end:toMin($("xEnd").value||"00:00"),from:$("xFrom").value,to:$("xTo").value,kits:pick("xKits").map(b=>b.dataset.k),content:$("xContent").value.trim()};
@@ -893,12 +923,16 @@ function openAdmin(){
 }
 
 /* ---- 신청 폼 ---- */
+/* 기간 반복: 시작~끝 날짜 중 요일이 맞는 날 목록 */
+function repeatDates(from,to,days){const out=[];if(!from||!to||to<from)return out;
+  for(let d=from;d<=to&&out.length<200;d=addDays(d,1))if(days.includes(parseYmd(d).getDay()))out.push(d);return out}
+const PRESETS=[[7,"1주"],[14,"2주"],[28,"4주"],[56,"8주"]];
 function openForm(pre={}){
   if(!canAct()){openLogin();return}
   const date=pre.date||S.sel;
   if(!dateBookable(date)){toast(`${md(lastBookable())}까지만 신청할 수 있어요`);return}
   S.draft={team:isAdmin()?(store("osce-admin-team")||""):S.team,day:pre.day??store("osce-day")??"",date,room:pre.room||1,start:pre.start||"09:00",dur:DURS.includes(pre.dur)?pre.dur:120,content:pre.content||"",kits:new Set()};
-  if(isAdmin())S.draft.rooms=new Set([S.draft.room]);
+  if(isAdmin()){S.draft.rooms=new Set([S.draft.room]);S.draft.rep={on:false,to:addDays(date,6),daily:true,days:new Set([1,2,3,4,5])}}
   openDrawer(isAdmin()?"대리 신청 (관리자)":"연습 신청",{form:true});drawForm();
 }
 /* 신청 변경: 신청 폼을 기존 내용으로 채워서 엶 */
@@ -945,6 +979,14 @@ function drawForm(){
     <label class="field"><span>날짜${isAdmin()?"":` (~${md(lastBookable())})`}</span><input id="fDate" type="date" value="${d.date}" ${lock?"disabled":""} ${minD?`min="${minD}"`:""} ${maxD?`max="${maxD}"`:""}></label>
     <label class="field"><span>시작</span><input id="fStart" type="time" step="1800" value="${d.start}" ${lock?"disabled":""}></label>
   </div>
+  ${multi&&d.rep?(()=>{const rp=d.rep,dl=rp.on?repeatDates(d.date,rp.to,rp.daily?[0,1,2,3,4,5,6]:[...rp.days]):[];
+    return `<div class="field"><span>반복 (관리자)</span>
+    <div class="seg r2" id="fRep"><button type="button" data-rep="0" aria-pressed="${!rp.on}">한 번만</button><button type="button" data-rep="1" aria-pressed="${rp.on}">기간 반복</button></div>
+    ${rp.on?`<div class="two" style="margin-top:6px"><label class="field"><span>반복 끝 날짜 (시작: ${md(d.date)})</span><input type="date" id="fRepTo" value="${rp.to}" min="${d.date}"></label>
+      <div class="field"><span>빠른 선택</span><div class="chips">${PRESETS.map(([n,t])=>`<button type="button" class="chip" data-preset="${n}" aria-pressed="${rp.to===addDays(d.date,n-1)}">${t}</button>`).join("")}</div></div></div>
+      <div class="adm-row" style="margin-top:6px"><div class="tg" id="fRepMode"><button type="button" data-m="daily" aria-pressed="${rp.daily}">기간 내 매일</button><button type="button" data-m="week" aria-pressed="${!rp.daily}">요일 선택</button></div>
+      ${rp.daily?"":`<div class="tg wk" id="fRepDays">${[1,2,3,4,5,6,0].map(w=>`<button type="button" data-w="${w}" aria-pressed="${rp.days.has(w)}">${WD[w]}</button>`).join("")}</div>`}</div>
+      <div class="hint">${dl.length}일 × ${sel.length}개 방 = <b>${dl.length*sel.length}건</b> 신청돼요. 이미 신청이 있는 날·방은 건너뛰고 결과에 알려 드려요.</div>`:""}</div>`})():""}
   <div class="field"><span>사용 시간</span>
     <div class="seg r${durs.length}" id="fDur">${(lock?[d.dur]:durs).map(m=>`<button type="button" data-dur="${m}" aria-pressed="${m===d.dur}" ${lock?"disabled":""}>${m%60?Math.floor(m/60)+"시간 30분":m/60+"시간"}<small>~${fmt(r.start+m)}</small></button>`).join("")}</div>
     ${adm?`<div class="two" style="margin-top:6px"><label class="field"><span>끝나는 시간 (관리자 · 30분 단위)</span><input id="fEnd" type="time" step="1800" value="${fmt(r.end)}"></label>
@@ -966,11 +1008,11 @@ function drawForm(){
       return `<button type="button" class="chip" data-k="${k}" aria-pressed="${d.kits.has(k)}" ${left?"":"disabled title='이 시간대 2세트 모두 예약됨'"}>${n}${left===1?"<small>1세트 남음</small>":""}</button>`}).join("")}</div>
     <span class="hint">남는 세트(1 또는 2)로 자동 배정돼요.${multi&&sel.length>1?` 방마다 한 세트씩, 세트가 모자라면 앞 방부터 배정돼요.`:""}</span></div>
   <div class="msg" id="fMsg"></div>
-  <button class="btn primary" type="button" id="fSubmit" ${(multi?(!sel.length||badSel.length):(clash.length||(teamBusy&&!isAdmin())||roomClosed||used2||blocked))?"disabled":""}>${lock?"재료·내용 저장":multi&&!sel.length?"방을 골라 주세요":`${multi?sel.join("·"):d.room}번 방 · ${fmt(r.start)}–${fmt(r.end)} ${ex?"으로 변경":multi&&sel.length>1?`신청 (${sel.length}건)`:"신청"}`}</button>
+  <button class="btn primary" type="button" id="fSubmit" ${(multi?(!sel.length||(badSel.length&&!(d.rep&&d.rep.on))):(clash.length||(teamBusy&&!isAdmin())||roomClosed||used2||blocked))?"disabled":""}>${lock?"재료·내용 저장":multi&&!sel.length?"방을 골라 주세요":multi&&d.rep&&d.rep.on?`${sel.join("·")}번 방 · ${fmt(r.start)}–${fmt(r.end)} · ${md(d.date)}~${md(d.rep.to)} 반복 신청`:`${multi?sel.join("·"):d.room}번 방 · ${fmt(r.start)}–${fmt(r.end)} ${ex?"으로 변경":multi&&sel.length>1?`신청 (${sel.length}건)`:"신청"}`}</button>
   ${ex?`<button class="btn ghost" type="button" id="fBack">변경 안 하고 돌아가기</button>`:""}`;
   bindForm();
 }
-function readForm(){const d=S.draft;if(isAdmin())d.team=($("fTeam").value||"").trim().replace(/[조팀]$/,"").toUpperCase();d.day=$("fDay").value.trim();d.date=$("fDate").value||d.date;d.start=$("fStart").value||d.start;d.content=$("fContent").value.trim()}
+function readForm(){const d=S.draft;if(d.rep&&$("fRepTo")&&$("fRepTo").value)d.rep.to=$("fRepTo").value;if(isAdmin())d.team=($("fTeam").value||"").trim().replace(/[조팀]$/,"").toUpperCase();d.day=$("fDay").value.trim();d.date=$("fDate").value||d.date;d.start=$("fStart").value||d.start;d.content=$("fContent").value.trim()}
 function bindForm(){
   ["fDate","fStart"].forEach(id=>$(id).addEventListener("change",()=>{readForm();drawForm()}));
   if($("fEnd"))$("fEnd").addEventListener("change",()=>{readForm();const e=toMin($("fEnd").value||"00:00"),st=toMin(S.draft.start);
@@ -980,6 +1022,11 @@ function bindForm(){
   if(isAdmin())$("fTeam").addEventListener("change",()=>{readForm();drawForm()});
   $("drawerBody").querySelectorAll("[data-room]").forEach(b=>b.onclick=()=>{readForm();const n=Number(b.dataset.room),d=S.draft;
     if(d.rooms&&!d.editId){d.rooms.has(n)?d.rooms.delete(n):d.rooms.add(n);d.room=[...d.rooms].sort((a,b)=>a-b)[0]||n}else d.room=n;drawForm()});
+  if($("fRep"))$("fRep").onclick=e=>{const b=e.target.closest("[data-rep]");if(!b)return;readForm();S.draft.rep.on=b.dataset.rep==="1";if(S.draft.rep.to<S.draft.date)S.draft.rep.to=addDays(S.draft.date,6);drawForm()};
+  if($("fRepTo"))$("fRepTo").addEventListener("change",()=>{readForm();if(S.draft.rep.to<S.draft.date)S.draft.rep.to=S.draft.date;drawForm()});
+  $("drawerBody").querySelectorAll("[data-preset]").forEach(b=>b.onclick=()=>{readForm();S.draft.rep.to=addDays(S.draft.date,Number(b.dataset.preset)-1);drawForm()});
+  if($("fRepMode"))$("fRepMode").onclick=e=>{const b=e.target.closest("[data-m]");if(!b)return;readForm();S.draft.rep.daily=b.dataset.m==="daily";drawForm()};
+  if($("fRepDays"))$("fRepDays").onclick=e=>{const b=e.target.closest("[data-w]");if(!b)return;readForm();const w=Number(b.dataset.w),ds=S.draft.rep.days;ds.has(w)?ds.delete(w):ds.add(w);drawForm()};
   $("fDur").onclick=e=>{const b=e.target.closest("[data-dur]");if(!b)return;readForm();S.draft.dur=Number(b.dataset.dur);drawForm()};
   $("fKits").onclick=e=>{const c=e.target.closest("[data-k]");if(!c||c.disabled)return;const k=c.dataset.k;S.draft.kits.has(k)?S.draft.kits.delete(k):S.draft.kits.add(k);c.setAttribute("aria-pressed",S.draft.kits.has(k))};
   $("fParse").onclick=()=>{const p=parseKakao($("fPaste").value);readForm();
@@ -1022,9 +1069,40 @@ async function submit(){
   }catch(err){setMsg(errText(err),"err");$("fSubmit").disabled=false;try{await api.loadBookings();render()}catch(e){}}
   finally{S.busy=false}
 }
+/* 관리자: 기간 반복 대리 신청 — 날짜마다·방마다 한 건씩, 겹치면 건너뜀 */
+async function submitRepeat(){
+  const d=S.draft,r=draftRange(),rooms=[...d.rooms].sort((a,b)=>a-b),rp=d.rep;
+  const dates=repeatDates(d.date,rp.to,rp.daily?[0,1,2,3,4,5,6]:[...rp.days]);
+  if(!d.team){setMsg("어느 조로 신청할지 적어 주세요.","err");$("fTeam").focus();return}
+  if(!rooms.length){setMsg("방을 하나 이상 골라 주세요.","err");return}
+  if(!dates.length){setMsg("반복할 날짜가 없어요. 끝 날짜와 요일을 확인해 주세요.","err");return}
+  if(r.start<OPEN||r.end>CLOSE){setMsg("08:00–22:00 사이로만 신청할 수 있어요.","err");return}
+  S.busy=true;$("fSubmit").disabled=true;
+  const ok=[],skip=[],short=[];let i=0;
+  for(const date of dates){
+    const rr={date,start:r.start,end:r.end},used=usedSets(rr);
+    for(const room of rooms){
+      i++;if(i%5===0)setMsg(`넣는 중… ${i}/${dates.length*rooms.length}`,"");
+      if(!roomInfo(room).open){skip.push(`${md(date)} ${room}번: 사용 불가 방`);continue}
+      const hit=roomTaken(rr,room);if(hit.length){skip.push(`${md(date)} ${room}번: ${hit[0].team}조 신청과 겹침`);continue}
+      const kits=[];
+      for(const k of d.kits){const s=SETS.find(s=>!used.has(k+"-"+s));if(s){kits.push(k+"-"+s);used.add(k+"-"+s)}else short.push(`${md(date)} ${room}번 ${KITSHORT[k]}`)}
+      try{const b=await api.add({date,room,start:r.start,end:r.end,day:d.day,content:d.content,kits,team:d.team});putLocal(b);ok.push(b)}
+      catch(err){kits.forEach(k=>used.delete(k));skip.push(`${md(date)} ${room}번: ${errText(err)}`)}
+    }
+  }
+  S.busy=false;store("osce-day",d.day);store("osce-admin-team",d.team);
+  render();syncSoon();
+  d.added=[...(d.added||[]),...ok.map(b=>b.id)].slice(-30);rp.on=false;drawForm();
+  const parts=[`${d.team}조 ${md(dates[0])}~${md(dates[dates.length-1])} ${fmt(r.start)}–${fmt(r.end)} · ${ok.length}건 신청했어요.`];
+  if(skip.length)parts.push(`건너뜀 ${skip.length}건 — ${skip.slice(0,6).join(" / ")}${skip.length>6?" …":""}`);
+  if(short.length)parts.push(`재료 세트 모자람 ${short.length}건`);
+  setMsg(parts.join(" "),skip.length||!ok.length?"err":"good");
+}
 /* 관리자: 고른 방마다 한 건씩 신청, 창은 열어 둔 채 이어서 추가 */
 async function submitMulti(){
   const d=S.draft,r=draftRange(),rooms=[...d.rooms].sort((a,b)=>a-b);
+  if(d.rep&&d.rep.on)return submitRepeat();
   if(!d.team){setMsg("어느 조로 신청할지 적어 주세요.","err");$("fTeam").focus();return}
   if(!rooms.length){setMsg("방을 하나 이상 골라 주세요.","err");return}
   if(r.start<OPEN||r.end>CLOSE){setMsg("08:00–22:00 사이로만 신청할 수 있어요.","err");return}
