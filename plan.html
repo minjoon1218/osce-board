@@ -259,15 +259,6 @@ body.dragging-on,body.dragging-on *{cursor:grabbing!important;user-select:none!i
           <div class="preview"><img id="planImg" alt="연습 플랜 이미지 미리보기"></div>
         </div>
       </section>
-      <section class="card" id="statCard">
-        <div class="card-h"><h2>⑤ 지금까지 연습 통계</h2><span class="meta" id="statMeta"></span></div>
-        <div class="card-b">
-          <div class="hint">시간이 지난 칸은 자동으로 '지난 연습'에 쌓여요(③에서 '포함'을 끄면 빠짐). 실제로 못 했거나 따로 한 연습은 <b>− / +</b>로 조정하면 돼요. 앞으로 배분은 <b>합계가 적은 질환·사람부터</b> 채워요.</div>
-          <div id="statD"></div>
-          <div id="statP"></div>
-          <div class="out-actions"><button class="btn sm" type="button" id="adjReset">조정 초기화</button><button class="btn sm ghost" type="button" id="histReset">지난 연습 기록 비우기</button></div>
-        </div>
-      </section>
       <section class="card" id="slotCard">
         <div class="card-h"><h2>④ 시간대별 형 · 이름</h2><span class="meta" id="slotMeta"></span></div>
         <div class="card-b">
@@ -277,6 +268,15 @@ body.dragging-on,body.dragging-on *{cursor:grabbing!important;user-select:none!i
           <datalist id="memberList"></datalist>
           <div id="pinBar" class="warn" hidden style="display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap"><span>순서를 직접 바꾼 상태예요. 질환·형을 바꾸면 <b>전체 자동 배분</b>을 눌러야 반영돼요.</span><button class="btn sm" type="button" id="unpinAll">전체 자동 배분</button></div>
           <div id="slots" style="display:grid;gap:10px"></div>
+        </div>
+      </section>
+      <section class="card" id="statCard">
+        <div class="card-h"><h2>⑤ 지금까지 연습 통계</h2><span class="meta" id="statMeta"></span></div>
+        <div class="card-b">
+          <div class="hint">시간이 지난 칸은 자동으로 '지난 연습'에 쌓여요(③에서 '포함'을 끄면 빠짐). 실제로 못 했거나 따로 한 연습은 <b>− / +</b>로 조정하면 돼요. 앞으로 배분은 <b>합계가 적은 질환·사람부터</b> 채워요.</div>
+          <div id="statD"></div>
+          <div id="statP"></div>
+          <div class="out-actions"><button class="btn sm" type="button" id="adjReset">조정 초기화</button><button class="btn sm ghost" type="button" id="histReset">지난 연습 기록 비우기</button></div>
         </div>
       </section>
     </div>
