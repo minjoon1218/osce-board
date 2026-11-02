@@ -113,6 +113,14 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .ses .chk input{width:auto}
 .empty{padding:14px;text-align:center;color:var(--muted);font-size:.86rem;border:1px dashed var(--line-strong);border-radius:10px}
 .wdrow{display:flex;align-items:center;gap:8px}.wdrow b{width:1.6em;font-size:.86rem;flex:none}.wdrow b.sun{color:var(--out)}.wdrow b.sat{color:#3b6fd6}
+.sblock{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.sblock-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;background:var(--sunk);font-size:.84rem}
+.sblock-h b{margin-right:auto}
+.srow{display:grid;grid-template-columns:3.2em minmax(4.6em,auto) minmax(0,1fr) minmax(0,8em);gap:6px;align-items:center;padding:6px 10px;border-top:1px solid var(--line);font-size:.84rem}
+.srow select,.srow input{padding:5px 6px;font-size:.84rem;min-height:32px}
+.srow .dn{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .dn.ov{color:var(--accent-ink)}
+@media (max-width:700px){.srow select,.srow input{font-size:16px}}
 .manual{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:6px}
 .manual input[type=text]{grid-column:1/-1}
 /* 미리보기 */
@@ -220,6 +228,16 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
           <div class="preview"><img id="planImg" alt="연습 플랜 이미지 미리보기"></div>
         </div>
       </section>
+      <section class="card" id="slotCard">
+        <div class="card-h"><h2>④ 시간대별 형 · 이름</h2><span class="meta" id="slotMeta"></span></div>
+        <div class="card-b">
+          <label class="field"><span>조원 (쉼표로 구분 — 비어 있는 칸에 돌아가며 들어가요)</span><input id="members" placeholder="예: 김민준, 이서연, 박지호, 최유나" autocomplete="off"></label>
+          <label class="chk" style="font-size:.84rem"><input type="checkbox" id="autoNames" style="width:auto"> 이름 안 쓴 칸은 조원을 돌아가며 자동 배정(흐린 글자)</label>
+          <div class="hint">시간대마다 형을 정하면 그 시간엔 그 형으로만 짜요. 칸마다 형·이름을 바꿀 수도 있어요(질환은 자동으로 다시 맞춰져요).</div>
+          <datalist id="memberList"></datalist>
+          <div id="slots" style="display:grid;gap:10px"></div>
+        </div>
+      </section>
     </div>
   </div>
 </main>
@@ -252,7 +270,7 @@ const tcol=i=>TCOL[i%TCOL.length];
 const S={code:"",role:"",team:"",teamList:[],bookings:[],loaded:false,blob:null,plan:null};
 let P=null;   /* 조별 설정(이 기기에 저장) */
 const defaults=()=>({types:[{id:"A",name:"A형",items:[]},{id:"B",name:"B형",items:[]},{id:"C",name:"C형",items:[]}],
-  from:ymd(),to:addDays(ymd(),13),exam:10,fb:5,buf:10,mix:"mix",days:{},edits:{},manual:[]});
+  from:ymd(),to:addDays(ymd(),13),exam:10,fb:5,buf:10,mix:"mix",days:{},edits:{},manual:[],members:[],autoNames:true,names:{},slotType:{},sesTypes:{}});
 const pkey=()=>"osce-plan-v1-"+(S.team||"_");
 function loadP(){let p=null;try{p=JSON.parse(store(pkey())||"null")}catch(e){}
   const d=defaults();P=Object.assign(d,p||{});
@@ -260,6 +278,7 @@ function loadP(){let p=null;try{p=JSON.parse(store(pkey())||"null")}catch(e){}
   P.types.forEach((t,i)=>{t.id=String(t.id||("T"+i));t.name=String(t.name||"");t.items=Array.isArray(t.items)?t.items.map(String).filter(Boolean):[]});
   if(!P.from||P.to<P.from){P.from=d.from;P.to=d.to}
   if(P.to<ymd()&&!p){P.from=d.from;P.to=d.to}
+  P.members=Array.isArray(P.members)?P.members.map(String).filter(Boolean):[];P.autoNames=P.autoNames!==false;["names","slotType","sesTypes"].forEach(k=>{if(!P[k]||typeof P[k]!=="object")P[k]={}});
   P.days=P.days||{};P.wd=P.wd&&typeof P.wd==="object"?P.wd:{};P.edits=P.edits||{};P.manual=Array.isArray(P.manual)?P.manual:[];}
 let saveT;function saveP(){clearTimeout(saveT);saveT=setTimeout(()=>store(pkey(),JSON.stringify(P)),200)}
 
@@ -300,7 +319,7 @@ function buildPlan(){
   const all=[];types.forEach(t=>t.items.forEach((name,j)=>all.push({t:t.id,name,key:t.id+"|"+name,ord:order[t.id]*100+j})));
   const count={},last={},typeLastDay={};all.forEach(x=>{count[x.key]=0;last[x.key]=-1});
   const ses=sessions().filter(s=>!s.off),byDay={};ses.forEach(s=>(byDay[s.date]=byDay[s.date]||[]).push(s));
-  let tick=0,prevType=null;const days=[];
+  let tick=0,prevType=null,prevName=null;const days=[],memCount={};
   const avg=t=>{const it=all.filter(x=>x.t===t.id);return it.reduce((a,x)=>a+count[x.key],0)/it.length};
   Object.keys(byDay).sort().forEach((date,di)=>{
     let chosen=(P.days[date]||[]).filter(id=>order[id]!=null);
@@ -314,23 +333,33 @@ function buildPlan(){
       }else chosen=types.map(t=>t.id);
     }
     chosen.forEach(id=>typeLastDay[id]=di);
-    const allow=new Set(chosen),day={date,types:chosen,auto,sessions:[]};
+    const day={date,types:chosen,auto,sessions:[]},dayTypes=[];
     for(const s of byDay[date]){
+      const sesSel=(P.sesTypes[s.id]||[]).filter(id=>order[id]!=null);   /* 시간대(예약)별 형 */
+      const sesAllow=sesSel.length?sesSel:chosen;
       const n=slotCount(s),slots=[],used=new Set();let t0=s.start+lead();
       for(let k=0;k<n;k++){
+        const key=s.id+"#"+k,ov=order[P.slotType[key]]!=null?P.slotType[key]:null;   /* 칸별 형 */
+        const allow=new Set(ov?[ov]:sesAllow);
         const cand=all.filter(x=>allow.has(x.t));let pick=null;
         if(cand.length){
           cand.sort((a,b)=>count[a.key]-count[b.key]||(used.has(a.key)?1:0)-(used.has(b.key)?1:0)
             ||(allow.size>1?((a.t===prevType?1:0)-(b.t===prevType?1:0)):0)||last[a.key]-last[b.key]||a.ord-b.ord);
           pick=cand[0];count[pick.key]++;last[pick.key]=tick++;used.add(pick.key);prevType=pick.t;
         }
-        slots.push({start:t0,examEnd:t0+P.exam,end:t0+P.exam+P.fb,item:pick});t0+=P.exam+P.fb;
+        if(pick&&!dayTypes.includes(pick.t))dayTypes.push(pick.t);
+        /* 이름: 직접 쓴 이름 우선, 비어 있으면 조원 중 가장 적게 맡은 사람(바로 앞 사람 피함) */
+        const manual=String(P.names[key]||"").trim();let who=manual;
+        if(!who&&P.autoNames&&P.members.length){who=P.members.slice().sort((a,b)=>(memCount[a]||0)-(memCount[b]||0)||(a===prevName?1:0)-(b===prevName?1:0)||P.members.indexOf(a)-P.members.indexOf(b))[0]}
+        if(who){memCount[who]=(memCount[who]||0)+1;prevName=who}
+        slots.push({key,start:t0,examEnd:t0+P.exam,end:t0+P.exam+P.fb,item:pick,typeOv:ov,name:who,nameManual:!!manual});t0+=P.exam+P.fb;
       }
-      day.sessions.push({...s,slots,spare:s.end-s.start-n*(P.exam+P.fb)});
+      day.sessions.push({...s,slots,sesTypes:sesSel,spare:s.end-s.start-n*(P.exam+P.fb)});
     }
+    if(dayTypes.length)day.types=dayTypes.sort((a,b)=>order[a]-order[b]);
     days.push(day);
   });
-  return {days,all,count,types};
+  return {days,all,count,types,memCount};
 }
 
 /* ================= 화면: 형 ================= */
@@ -354,7 +383,7 @@ $("types").addEventListener("click",e=>{
   const del=e.target.closest("[data-del]");if(del){t.items.splice(Number(del.dataset.del),1);saveP();renderTypes();renderDays();renderPlan();return}
   if(e.target.closest("[data-addbtn]")){const inp=card.querySelector("[data-add]");addItems(tid,inp.value);inp.value="";return}
   if(e.target.closest("[data-deltype]")){if(t.items.length&&!confirm(`${t.name||"이 형"}과 질환 ${t.items.length}개를 지울까요?`))return;
-    P.types=P.types.filter(x=>x.id!==tid);for(const d in P.days)P.days[d]=P.days[d].filter(id=>id!==tid);for(const w in P.wd)P.wd[w]=P.wd[w].filter(id=>id!==tid);saveP();renderTypes();renderDays();renderPlan()}
+    P.types=P.types.filter(x=>x.id!==tid);for(const d in P.days)P.days[d]=P.days[d].filter(id=>id!==tid);for(const w in P.wd)P.wd[w]=P.wd[w].filter(id=>id!==tid);for(const k in P.sesTypes)P.sesTypes[k]=P.sesTypes[k].filter(id=>id!==tid);for(const k in P.slotType)if(P.slotType[k]===tid)delete P.slotType[k];saveP();renderTypes();renderDays();renderPlan()}
 });
 $("types").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.matches("[data-add]")&&!e.isComposing){e.preventDefault();const tid=e.target.closest(".type").dataset.t;addItems(tid,e.target.value);e.target.value=""}});
 $("types").addEventListener("input",e=>{if(e.target.matches("[data-name]")){const t=P.types.find(x=>x.id===e.target.closest(".type").dataset.t);t.name=e.target.value.trim();saveP();renderDays();renderPlanSoon()}});
@@ -369,6 +398,7 @@ function renderSettings(){
   const per=P.exam+P.fb;
   $("slotHint").innerHTML=`한 케이스 = 시험 <b>${P.exam}분</b> + 피드백 <b>${P.fb}분</b> = ${per}분 · 예약 시간에서 여유 ${P.buf}분을 빼고 채워요 → 1시간이면 <b>${Math.max(0,Math.floor((60-P.buf)/per))}케이스</b>, 2시간이면 <b>${Math.max(0,Math.floor((120-P.buf)/per))}케이스</b>`;
   if(!$("mDate").value)$("mDate").value=P.from>ymd()?P.from:ymd();
+  if(document.activeElement!==$("members"))$("members").value=P.members.join(", ");$("autoNames").checked=P.autoNames;
   renderWd();
 }
 function renderWd(){
@@ -454,6 +484,7 @@ function fitText(g,t,w){if(g.measureText(t).width<=w)return t;let s=t;while(s.le
 function wrapWords(g,items,w){/* 칩 줄바꿈 배치 */const rows=[[]];let x=0;for(const it of items){const iw=it.w;if(x+iw>w&&rows[rows.length-1].length){rows.push([]);x=0}rows[rows.length-1].push({...it,x});x+=iw+8}return rows}
 function drawPlan(plan){
   const W=900,PADX=36,IN=W-PADX*2;
+  const hasNames=plan.days.some(d=>d.sessions.some(s=>s.slots.some(x=>x.name)));
   const tName=id=>{const t=P.types.find(x=>x.id===id);return t?(t.name||t.id):id};
   const tc=id=>tcol(typeIndex(id));
   const meas=document.createElement("canvas").getContext("2d");
@@ -468,7 +499,7 @@ function drawPlan(plan){
   const nSes=plan.days.reduce((a,d)=>a+d.sessions.length,0);
   H+=plan.days.length*(DAY_H+14)+nSes*(SES_H+8)+nSlots*ROW;
   if(!plan.days.length)H+=120;
-  H+=24+26+statRows.length*36+20+34;
+  H+=24+26+statRows.length*36+20+34+(plan.days.some(d=>d.sessions.some(s=>s.slots.some(x=>x.name)))?64:0);
   const scale=Math.min(2,Math.sqrt(15e6/(W*H)));
   const cv=document.createElement("canvas");cv.width=Math.round(W*scale);cv.height=Math.round(H*scale);
   const g=cv.getContext("2d");g.scale(scale,scale);g.textBaseline="middle";
@@ -503,8 +534,9 @@ function drawPlan(plan){
         const it=sl.item;
         if(it){const c=tc(it.t),lab=tName(it.t);g.font=`700 13px ${FONT}`;const bw=Math.max(34,g.measureText(lab).width+16);
           rr(g,PADX+92,cy-11,bw,22,11);g.fillStyle=c[1];g.fill();g.fillStyle=c[2];g.textAlign="center";g.fillText(lab,PADX+92+bw/2,cy+1);g.textAlign="left";
-          g.fillStyle="#16212a";g.font=`600 17px ${FONT}`;g.fillText(fitText(g,it.name,IN-92-bw-14-190),PADX+92+bw+12,cy);}
+          g.fillStyle="#16212a";g.font=`600 17px ${FONT}`;g.fillText(fitText(g,it.name,IN-92-bw-14-190-(hasNames?150:0)),PADX+92+bw+12,cy);}
         else{g.fillStyle="#a3b0ba";g.font=`500 15px ${FONT}`;g.fillText("자유 연습 (질환을 넣어 주세요)",PADX+92,cy)}
+        if(sl.name){g.fillStyle="#0b7f74";g.font=`700 16px ${FONT}`;g.textAlign="right";g.fillText(fitText(g,sl.name,130),PADX+IN-8-192,cy);g.textAlign="left"}
         g.fillStyle="#a3b0ba";g.font=`500 13px ${FONT}`;g.textAlign="right";
         g.fillText(P.fb?`시험 ~${fmt(sl.examEnd)} · 피드백 ~${fmt(sl.end)}`:`시험 ~${fmt(sl.examEnd)}`,PADX+IN-8,cy);g.textAlign="left";
         y+=ROW;
@@ -519,6 +551,8 @@ function drawPlan(plan){
   g.font=`600 15px ${FONT}`;
   for(const row of statRows){for(const c of row){const col=tc(c.t);rr(g,PADX+c.x,y,c.w,28,14);g.fillStyle=col[1];g.fill();g.fillStyle=col[2];g.fillText(c.label,PADX+c.x+11,y+15)}y+=36}
   if(!statChips.length){g.fillStyle="#a3b0ba";g.fillText("형에 질환을 넣으면 여기에 횟수가 나와요",PADX,y+12);y+=36}
+  if(hasNames){y+=6;const who=Object.entries(plan.memCount).filter(([,n])=>n);g.fillStyle="#16212a";g.font=`700 17px ${FONT}`;g.fillText("사람별 케이스 수",PADX,y+12);y+=28;
+    g.font=`600 15px ${FONT}`;g.fillStyle="#334155";g.fillText(fitText(g,who.map(([n,c])=>`${n} ${c}`).join("  ·  "),IN),PADX,y+10);y+=30}
   y+=12;g.fillStyle="#a3b0ba";g.font=`500 13px ${FONT}`;g.fillText("오스키실 예약판 · 연습 플랜",PADX,y+10);
   return cv;
 }
@@ -526,15 +560,16 @@ function planText(plan){
   const tName=id=>{const t=P.types.find(x=>x.id===id);return t?(t.name||t.id):id};
   const L=[`📋 ${S.team}조 연습 플랜 (${md(P.from)}–${md(P.to)})`,`케이스당 시험 ${P.exam}분 + 피드백 ${P.fb}분`];
   for(const d of plan.days){L.push("",`■ ${md(d.date)} ${d.types.map(tName).join("·")}`);
-    for(const s of d.sessions){L.push(`${fmt(s.start)}–${fmt(s.end)} ${s.place}`);s.slots.forEach(sl=>L.push(` ${fmt(sl.start)} ${sl.item?`${sl.item.name} (${tName(sl.item.t)})`:"자유 연습"}`))}}
+    for(const s of d.sessions){L.push(`${fmt(s.start)}–${fmt(s.end)} ${s.place}`);s.slots.forEach(sl=>L.push(` ${fmt(sl.start)} ${sl.item?`${sl.item.name} (${tName(sl.item.t)})`:"자유 연습"}${sl.name?" - "+sl.name:""}`))}}
   if(plan.all.length)L.push("","📊 질환별 "+plan.all.map(x=>`${x.name} ${plan.count[x.key]}`).join(" · "));
   return L.join("\n");
 }
-let planT;function renderPlanSoon(){clearTimeout(planT);planT=setTimeout(renderPlan,150)}
+let planT;function renderPlanSoon(keep){clearTimeout(planT);planT=setTimeout(()=>renderPlan(keep),150)}
 let lastUrl=null,renderSeq=0;
-function renderPlan(){
+function renderPlan(keepEditor){
   if(!P||!S.team)return;
   const plan=buildPlan();S.plan=plan;
+  if(keepEditor!==true)renderSlots(plan);
   const cv=drawPlan(plan);
   const types=activeTypes(),totalCases=plan.days.reduce((a,d)=>a+d.sessions.reduce((b,s)=>b+s.slots.length,0),0);
   $("planMeta").textContent=plan.days.length?`${plan.days.length}일 · ${totalCases}케이스`:"";
@@ -548,6 +583,48 @@ function renderPlan(){
   const seq=++renderSeq;S.blob=null;S.cv=cv;
   cv.toBlob(b=>{if(seq!==renderSeq||!b)return;S.blob=b;if(lastUrl)URL.revokeObjectURL(lastUrl);lastUrl=URL.createObjectURL(b);$("planImg").src=lastUrl},"image/png");
 }
+/* ④ 시간대별 형·이름 편집 */
+let slotSig="";
+function renderSlots(plan){
+  const types=activeTypes(),tName=id=>{const t=P.types.find(x=>x.id===id);return t?(t.name||t.id):id};
+  $("memberList").innerHTML=P.members.map(m=>`<option value="${esc(m)}">`).join("");
+  const n=plan.days.reduce((a,d)=>a+d.sessions.reduce((b,s)=>b+s.slots.length,0),0);
+  $("slotMeta").textContent=n?`${n}칸`:"";
+  if(!n){slotSig="";$("slots").innerHTML=`<div class="empty">연습 시간이 생기면 여기서 칸마다 형·이름을 정할 수 있어요.</div>`;return}
+  /* 구조(시간대·칸·형 목록)가 같으면 DOM을 갈아끼우지 않고 값만 고침 — 입력 중 포커스·클릭이 끊기지 않게 */
+  const sig=JSON.stringify([types.map(t=>t.id+":"+t.name),plan.days.map(d=>d.sessions.map(x=>[x.id,x.start,x.end,x.slots.length]))]);
+  if(sig===slotSig&&$("slots").querySelector(".srow")){
+    for(const d of plan.days)for(const x of d.sessions){
+      const pk=$("slots").querySelector(`.pick[data-ses="${CSS.escape(x.id)}"]`);
+      if(pk)pk.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.hasAttribute("data-auto")?!x.sesTypes.length:x.sesTypes.includes(b.dataset.type))));
+      for(const sl of x.slots){const row=$("slots").querySelector(`.srow[data-key="${CSS.escape(sl.key)}"]`);if(!row)continue;
+        const st=row.querySelector("[data-st]");if(document.activeElement!==st)st.value=sl.typeOv||"";
+        const dn=row.querySelector(".dn");dn.className="dn"+(sl.typeOv?" ov":"");dn.innerHTML=sl.item?esc(sl.item.name):"<span class=hint>자유 연습</span>";
+        const nm=row.querySelector("[data-nm]");if(document.activeElement!==nm)nm.value=sl.nameManual?sl.name:"";nm.placeholder=sl.name&&!sl.nameManual?sl.name:"이름";}
+    }
+    return;
+  }
+  slotSig=sig;
+  $("slots").innerHTML=plan.days.map(d=>d.sessions.map(s=>{
+    const chips=`<div class="pick" data-ses="${esc(s.id)}"><button type="button" data-auto aria-pressed="${!s.sesTypes.length}">자동</button>${types.map(t=>`<button type="button" data-type="${esc(t.id)}" style="${typeStyle(typeIndex(t.id))}" aria-pressed="${s.sesTypes.includes(t.id)}">${esc(t.name||t.id)}</button>`).join("")}</div>`;
+    return `<div class="sblock"><div class="sblock-h"><b>${md(d.date)} <span class="mono">${fmt(s.start)}–${fmt(s.end)}</span> · ${esc(s.place)}</b>${chips}</div>${s.slots.map(sl=>`<div class="srow" data-key="${esc(sl.key)}">
+      <span class="mono">${fmt(sl.start)}</span>
+      <select data-st aria-label="${fmt(sl.start)} 형"><option value="">자동</option>${types.map(t=>`<option value="${esc(t.id)}"${sl.typeOv===t.id?" selected":""}>${esc(t.name||t.id)}</option>`).join("")}</select>
+      <span class="dn${sl.typeOv?" ov":""}">${sl.item?esc(sl.item.name):"<span class=hint>자유 연습</span>"}</span>
+      <input data-nm list="memberList" value="${sl.nameManual?esc(sl.name):""}" placeholder="${sl.name&&!sl.nameManual?esc(sl.name):"이름"}" title="흐린 글자 = 자동 배정" aria-label="${fmt(sl.start)} 이름" autocomplete="off">
+    </div>`).join("")}</div>`}).join("")).join("");
+}
+$("slots").addEventListener("click",e=>{const b=e.target.closest(".pick button");if(!b)return;const sid=b.parentElement.dataset.ses;let sel=(P.sesTypes[sid]||[]).slice();
+  if(b.hasAttribute("data-auto"))sel=[];else{const id=b.dataset.type;sel=sel.includes(id)?sel.filter(x=>x!==id):sel.concat(id)}
+  if(sel.length)P.sesTypes[sid]=sel;else delete P.sesTypes[sid];saveP();renderPlan()});
+$("slots").addEventListener("change",e=>{const row=e.target.closest(".srow");if(!row)return;const k=row.dataset.key;
+  if(e.target.matches("[data-st]")){if(e.target.value)P.slotType[k]=e.target.value;else delete P.slotType[k];saveP();renderPlan();return}
+  if(e.target.matches("[data-nm]")){saveP();renderPlan()}});
+$("slots").addEventListener("input",e=>{if(!e.target.matches("[data-nm]"))return;const k=e.target.closest(".srow").dataset.key,v=e.target.value.trim().slice(0,20);
+  if(v)P.names[k]=v;else delete P.names[k];saveP();renderPlanSoon(true)});
+$("members").addEventListener("input",()=>{P.members=[...new Set($("members").value.split(/[,，、\n]+/).map(x=>x.trim().slice(0,20)).filter(Boolean))].slice(0,20);saveP();renderPlanSoon(true)});
+$("members").addEventListener("change",()=>renderPlan());
+$("autoNames").onchange=()=>{P.autoNames=$("autoNames").checked;saveP();renderPlan()};
 const fileName=()=>`${S.team}조_연습플랜_${P.from.slice(5).replace("-","")}-${P.to.slice(5).replace("-","")}.png`;
 function blobNow(){return S.blob?Promise.resolve(S.blob):new Promise(r=>(S.cv||drawPlan(S.plan||buildPlan())).toBlob(r,"image/png"))}
 $("saveImg").onclick=async()=>{const b=await blobNow();const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=fileName();document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),10000);toast("이미지를 저장했어요")};
