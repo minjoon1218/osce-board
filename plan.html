@@ -119,18 +119,22 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .sblock{border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .sblock-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;background:var(--sunk);font-size:.84rem}
 .sblock-h b{margin-right:auto}
-.srow{display:grid;grid-template-columns:3.2em minmax(4.6em,auto) minmax(0,1fr) minmax(0,8em) auto;gap:6px;align-items:center;padding:6px 10px;border-top:1px solid var(--line);font-size:.84rem}
+.srow{display:grid;grid-template-columns:auto 3.2em minmax(4.6em,auto) minmax(0,1fr) minmax(0,8em);gap:6px;align-items:center;padding:6px 10px;border-top:1px solid var(--line);font-size:.84rem}
 .srow select,.srow input{padding:5px 6px;font-size:.84rem;min-height:32px}
 .srow .dn{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .srow .dn.ov{color:var(--accent-ink)}
-.srow .mv{display:grid;gap:2px}
-.srow .mv button{width:28px;height:16px;border-radius:5px;font-size:.6rem;line-height:1;color:var(--muted);background:var(--sunk)}
-.srow .mv button:hover{color:var(--fg);background:var(--line)}
+.srow .grip{width:28px;height:32px;border-radius:7px;display:grid;place-items:center;font-size:1.1rem;color:var(--faint);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.srow .grip:hover{color:var(--fg);background:var(--sunk)}
+.srow.dragging{opacity:.35}
+.srow.ghost{z-index:80;background:var(--surface);box-shadow:0 10px 30px rgba(0,0,0,.18);border:1px solid var(--accent);border-radius:10px;pointer-events:none;opacity:.96}
+.srow.dropped{animation:dropflash .7s ease}
+@keyframes dropflash{from{background:var(--accent-soft)}to{background:transparent}}
+.dropline{position:fixed;height:3px;border-radius:3px;background:var(--accent);z-index:79;pointer-events:none}
+body.dragging-on,body.dragging-on *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}
 @media (max-width:700px){
   /* 폰: 1줄 = 시간·질환(안 잘리게), 2줄 = 형·이름, 오른쪽 ▲▼ */
-  .srow{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"t dn mv" "st nm mv";gap:4px 8px;padding:7px 8px}
-  .srow>.mono{grid-area:t}.srow>[data-st]{grid-area:st}.srow>.dn{grid-area:dn;white-space:normal;font-size:.92rem}.srow>[data-nm]{grid-area:nm}.srow>.mv{grid-area:mv}
-  .srow .mv button{width:32px;height:26px;font-size:.7rem}
+  .srow{grid-template-columns:auto auto minmax(0,1fr);grid-template-areas:"g t dn" "g st nm";gap:4px 8px;padding:7px 8px 7px 4px}
+  .srow>.grip{grid-area:g;height:100%;min-height:56px;width:32px}.srow>.mono{grid-area:t}.srow>[data-st]{grid-area:st}.srow>.dn{grid-area:dn;white-space:normal;font-size:.92rem}.srow>[data-nm]{grid-area:nm}
 }
 @media (max-width:700px){.srow select,.srow input{font-size:16px}}
 .manual{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:6px}
@@ -245,8 +249,9 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
         <div class="card-b">
           <label class="field"><span>조원 (쉼표로 구분 — 비어 있는 칸에 돌아가며 들어가요)</span><input id="members" placeholder="예: 김민준, 이서연, 박지호, 최유나" autocomplete="off"></label>
           <label class="chk" style="font-size:.84rem"><input type="checkbox" id="autoNames" style="width:auto"> 이름 안 쓴 칸은 조원을 돌아가며 자동 배정(흐린 글자)</label>
-          <div class="hint">시간대마다 형을 정하면 그 시간엔 그 형으로만 짜요. 칸마다 형·이름을 바꿀 수도 있어요(질환은 자동으로 다시 맞춰져요). <b>▲▼로 순서를 바꿀 수 있어요</b>(다른 시간대로도 이동). 바꾼 시간대는 그 순서로 고정되고, 시간대 오른쪽 '순서 초기화'로 자동 배분으로 되돌려요.</div>
+          <div class="hint">시간대마다 형을 정하면 그 시간엔 그 형으로만 짜요. 칸마다 형·이름을 바꿀 수도 있어요(질환은 자동으로 다시 맞춰져요). <b>⠿ 손잡이를 잡고 끌어서 순서를 바꿔요</b>(다른 시간대로도, 이름도 같이 따라감). 옮기면 그 순서·이름으로 고정되고, '전체 자동 배분'(또는 시간대별 '순서 초기화')으로 되돌려요.</div>
           <datalist id="memberList"></datalist>
+          <div id="pinBar" class="warn" hidden style="display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap"><span>순서를 직접 바꾼 상태예요. 질환·형을 바꾸면 <b>전체 자동 배분</b>을 눌러야 반영돼요.</span><button class="btn sm" type="button" id="unpinAll">전체 자동 배분</button></div>
           <div id="slots" style="display:grid;gap:10px"></div>
         </div>
       </section>
@@ -282,7 +287,7 @@ const tcol=i=>TCOL[i%TCOL.length];
 const S={code:"",role:"",team:"",teamList:[],bookings:[],loaded:false,blob:null,plan:null};
 let P=null;   /* 조별 설정(이 기기에 저장) */
 const defaults=()=>({types:[{id:"A",name:"A형",items:[]},{id:"B",name:"B형",items:[]},{id:"C",name:"C형",items:[]}],
-  from:ymd(),to:addDays(ymd(),13),exam:10,fb:5,buf:10,mix:"mix",days:{},edits:{},manual:[],members:[],autoNames:true,names:{},slotType:{},sesTypes:{},slotItem:{}});
+  from:ymd(),to:addDays(ymd(),13),exam:10,fb:5,buf:10,mix:"mix",days:{},edits:{},manual:[],members:[],autoNames:true,names:{},slotType:{},sesTypes:{},slotItem:{},namePin:{}});
 const pkey=()=>"osce-plan-v1-"+(S.team||"_");
 function loadP(){let p=null;try{p=JSON.parse(store(pkey())||"null")}catch(e){}
   const d=defaults();P=Object.assign(d,p||{});
@@ -290,7 +295,7 @@ function loadP(){let p=null;try{p=JSON.parse(store(pkey())||"null")}catch(e){}
   P.types.forEach((t,i)=>{t.id=String(t.id||("T"+i));t.name=String(t.name||"");t.items=Array.isArray(t.items)?t.items.map(String).filter(Boolean):[];t.off=Array.isArray(t.off)?t.off.filter(x=>t.items.includes(x)):[]});
   if(!P.from||P.to<P.from){P.from=d.from;P.to=d.to}
   if(P.to<ymd()&&!p){P.from=d.from;P.to=d.to}
-  P.members=Array.isArray(P.members)?P.members.map(String).filter(Boolean):[];P.autoNames=P.autoNames!==false;["names","slotType","sesTypes","slotItem"].forEach(k=>{if(!P[k]||typeof P[k]!=="object")P[k]={}});
+  P.members=Array.isArray(P.members)?P.members.map(String).filter(Boolean):[];P.autoNames=P.autoNames!==false;["names","slotType","sesTypes","slotItem","namePin"].forEach(k=>{if(!P[k]||typeof P[k]!=="object")P[k]={}});
   P.days=P.days||{};P.wd=P.wd&&typeof P.wd==="object"?P.wd:{};P.edits=P.edits||{};P.manual=Array.isArray(P.manual)?P.manual:[];}
 let saveT;function saveP(){clearTimeout(saveT);saveT=setTimeout(()=>store(pkey(),JSON.stringify(P)),200)}
 
@@ -604,6 +609,7 @@ function renderPlan(keepEditor){
 /* ④ 시간대별 형·이름 편집 */
 let slotSig="";
 function renderSlots(plan){
+  $("pinBar").hidden=!Object.keys(P.slotItem).length;
   const types=activeTypes(),tName=id=>{const t=P.types.find(x=>x.id===id);return t?(t.name||t.id):id};
   $("memberList").innerHTML=P.members.map(m=>`<option value="${esc(m)}">`).join("");
   const n=plan.days.reduce((a,d)=>a+d.sessions.reduce((b,s)=>b+s.slots.length,0),0);
@@ -627,39 +633,72 @@ function renderSlots(plan){
   $("slots").innerHTML=plan.days.map(d=>d.sessions.map(s=>{
     const chips=`<div class="pick" data-ses="${esc(s.id)}"><button type="button" data-auto aria-pressed="${!s.sesTypes.length}">자동</button>${types.map(t=>`<button type="button" data-type="${esc(t.id)}" style="${typeStyle(typeIndex(t.id))}" aria-pressed="${s.sesTypes.includes(t.id)}">${esc(t.name||t.id)}</button>`).join("")}</div>`;
     return `<div class="sblock"><div class="sblock-h"><b>${md(d.date)} <span class="mono">${fmt(s.start)}–${fmt(s.end)}</span> · ${esc(s.place)}</b><button type="button" class="btn sm ghost" data-unpin="${esc(s.id)}"${s.slots.some(x=>x.pinned)?"":" hidden"}>순서 초기화</button>${chips}</div>${s.slots.map(sl=>`<div class="srow" data-key="${esc(sl.key)}">
+      <button type="button" class="grip" data-grip aria-label="${fmt(sl.start)} ${sl.item?esc(sl.item.name):""} 끌어서 옮기기 (키보드: 위·아래 화살표)">⠿</button>
       <span class="mono">${fmt(sl.start)}</span>
       <select data-st aria-label="${fmt(sl.start)} 형"><option value="">자동</option>${types.map(t=>`<option value="${esc(t.id)}"${sl.typeOv===t.id?" selected":""}>${esc(t.name||t.id)}</option>`).join("")}</select>
       <span class="dn${sl.typeOv?" ov":""}">${sl.item?esc(sl.item.name):"<span class=hint>자유 연습</span>"}</span>
       <input data-nm list="memberList" value="${sl.nameManual?esc(sl.name):""}" placeholder="${sl.name&&!sl.nameManual?esc(sl.name):"이름"}" title="흐린 글자 = 자동 배정" aria-label="${fmt(sl.start)} 이름" autocomplete="off">
-      <span class="mv"><button type="button" data-mv="-1" aria-label="${fmt(sl.start)} 위로">▲</button><button type="button" data-mv="1" aria-label="${fmt(sl.start)} 아래로">▼</button></span>
     </div>`).join("")}</div>`}).join("")).join("");
 }
 $("slots").addEventListener("click",e=>{
-  const mv=e.target.closest("[data-mv]");
-  if(mv){const flat=(S.plan||buildPlan()).days.flatMap(d=>d.sessions.flatMap(x=>x.slots));const k=mv.closest(".srow").dataset.key;
-    const i=flat.findIndex(x=>x.key===k),j=i+Number(mv.dataset.mv);if(i<0||j<0||j>=flat.length)return;
-    const a=flat[i],b=flat[j];
-    const setOr=(o,key,v)=>{if(v)o[key]=v;else delete o[key]};
-    /* 두 칸이 속한 시간대는 지금 보이는 순서 그대로 고정한 뒤 맞바꿈 → 다른 칸·다른 시간대는 안 바뀜 */
-    const sidOf=x=>x.key.slice(0,x.key.lastIndexOf("#")),sids=new Set([sidOf(a),sidOf(b)]);
-    for(const x of flat)if(sids.has(sidOf(x))&&x.item&&!P.slotItem[x.key])P.slotItem[x.key]=x.item.key;
-    setOr(P.slotItem,a.key,b.item&&b.item.key);setOr(P.slotItem,b.key,a.item&&a.item.key);
-    const ta=P.slotType[a.key],tb=P.slotType[b.key];setOr(P.slotType,a.key,tb);setOr(P.slotType,b.key,ta);
-    const na=P.names[a.key],nb=P.names[b.key];setOr(P.names,a.key,nb);setOr(P.names,b.key,na);
-    saveP();renderPlan();
-    const moved=$("slots").querySelector(`.srow[data-key="${CSS.escape(b.key)}"] [data-mv="${mv.dataset.mv}"]`);if(moved)moved.focus({preventScroll:true});return}
   const un=e.target.closest("[data-unpin]");
-  if(un){const sid=un.dataset.unpin;for(const k of Object.keys(P.slotItem))if(k.startsWith(sid+"#"))delete P.slotItem[k];saveP();renderPlan();return}
+  if(un){const sid=un.dataset.unpin;for(const k of Object.keys(P.slotItem))if(k.startsWith(sid+"#"))delete P.slotItem[k];for(const k of Object.keys(P.namePin))if(k.startsWith(sid+"#")){delete P.names[k];delete P.namePin[k]}saveP();renderPlan();return}
   const b=e.target.closest(".pick button");if(!b)return;const sid=b.parentElement.dataset.ses;let sel=(P.sesTypes[sid]||[]).slice();
   if(b.hasAttribute("data-auto"))sel=[];else{const id=b.dataset.type;sel=sel.includes(id)?sel.filter(x=>x!==id):sel.concat(id)}
   if(sel.length)P.sesTypes[sid]=sel;else delete P.sesTypes[sid];saveP();renderPlan()});
+/* 11/02 dw: 잡아서 끌어 옮기기 — 칸 i를 j 자리로(사이 칸은 한 칸씩 밀림). 질환·칸 형·이름(자동 이름 포함)이 같이 따라감.
+   옮기기 전에 지금 보이는 플랜 전체의 질환·이름을 고정 → 옮긴 칸 말고는 그대로. '전체 자동 배분'·'순서 초기화'로 자동 복귀 */
+function moveSlot(i,j){
+  const flat=(S.plan||buildPlan()).days.flatMap(d=>d.sessions.flatMap(x=>x.slots));
+  if(i<0||j<0||i>=flat.length||j>=flat.length||i===j)return null;
+  const lo=Math.min(i,j),hi=Math.max(i,j);
+  /* 지금 보이는 플랜 전체를 그대로 고정한 뒤 옮김 → 옮긴 칸 말고는 아무것도 안 바뀜 */
+  for(const x of flat){if(x.item&&!P.slotItem[x.key])P.slotItem[x.key]=x.item.key;if(x.name&&!P.names[x.key]){P.names[x.key]=x.name;P.namePin[x.key]=1}}
+  const box=flat.slice(lo,hi+1).map(x=>({it:P.slotItem[x.key],ty:P.slotType[x.key],nm:P.names[x.key],np:P.namePin[x.key]}));
+  const [m]=box.splice(i-lo,1);box.splice(j-lo,0,m);
+  const setOr=(o,key,v)=>{if(v)o[key]=v;else delete o[key]};
+  flat.slice(lo,hi+1).forEach((x,n)=>{setOr(P.slotItem,x.key,box[n].it);setOr(P.slotType,x.key,box[n].ty);setOr(P.names,x.key,box[n].nm);setOr(P.namePin,x.key,box[n].np)});
+  saveP();renderPlan();return flat[j].key;
+}
+(function dragSort(){
+  let d=null;
+  const rows=()=>[...$("slots").querySelectorAll(".srow")];
+  function targetIndex(y){const rs=rows();for(let n=0;n<rs.length;n++){const r=rs[n].getBoundingClientRect();if(y<r.top+r.height/2)return n}return rs.length}
+  function placeLine(t){const rs=rows();if(!rs.length)return;const r=t<rs.length?rs[t].getBoundingClientRect():rs[rs.length-1].getBoundingClientRect();
+    const y=t<rs.length?r.top:r.bottom;d.line.style.top=(y-1.5)+"px";d.line.style.left=r.left+"px";d.line.style.width=r.width+"px"}
+  function tick(){if(!d)return;const m=60,v=d.y<m?-(m-d.y)/3:d.y>innerHeight-m?(d.y-(innerHeight-m))/3:0;if(v){scrollBy(0,v);move(d.y)}d.raf=requestAnimationFrame(tick)}
+  function move(y){d.y=y;d.ghost.style.transform=`translateY(${y-d.dy-d.top0}px)`;d.t=targetIndex(y);placeLine(d.t)}
+  function end(ok){if(!d)return;cancelAnimationFrame(d.raf);d.ghost.remove();d.line.remove();d.row.classList.remove("dragging");document.body.classList.remove("dragging-on");
+    const {from,t}=d;d=null;if(!ok)return;const to=t>from?t-1:t;const k=moveSlot(from,to);
+    if(k){const g=$("slots").querySelector(`.srow[data-key="${CSS.escape(k)}"]`);if(g){g.classList.add("dropped");setTimeout(()=>g.classList.remove("dropped"),700)}}}
+  $("slots").addEventListener("pointerdown",e=>{
+    const grip=e.target.closest("[data-grip]");if(!grip||e.button>0)return;e.preventDefault();
+    const row=grip.closest(".srow"),rs=rows(),from=rs.indexOf(row),r=row.getBoundingClientRect();
+    const ghost=row.cloneNode(true);ghost.classList.add("ghost");Object.assign(ghost.style,{position:"fixed",left:r.left+"px",top:r.top+"px",width:r.width+"px",margin:0});
+    const line=document.createElement("div");line.className="dropline";
+    document.body.append(ghost,line);row.classList.add("dragging");document.body.classList.add("dragging-on");
+    d={row,ghost,line,from,t:from,dy:e.clientY-r.top,top0:r.top,y:e.clientY,raf:0};
+    try{grip.setPointerCapture(e.pointerId)}catch(_){}
+    move(e.clientY);d.raf=requestAnimationFrame(tick);
+  });
+  $("slots").addEventListener("pointermove",e=>{if(d){e.preventDefault();move(e.clientY)}});
+  $("slots").addEventListener("pointerup",()=>end(true));
+  $("slots").addEventListener("pointercancel",()=>end(false));
+  $("slots").addEventListener("lostpointercapture",()=>{if(d)end(true)});
+  document.addEventListener("keydown",e=>{if(d&&e.key==="Escape")end(false)});
+  /* 키보드: 손잡이에서 위·아래 화살표 */
+  $("slots").addEventListener("keydown",e=>{const grip=e.target.closest("[data-grip]");if(!grip||(e.key!=="ArrowUp"&&e.key!=="ArrowDown"))return;e.preventDefault();
+    const rs=rows(),i=rs.indexOf(grip.closest(".srow")),k=moveSlot(i,i+(e.key==="ArrowUp"?-1:1));
+    if(k){const g=$("slots").querySelector(`.srow[data-key="${CSS.escape(k)}"] [data-grip]`);if(g)g.focus({preventScroll:false})}});
+})();
 $("slots").addEventListener("change",e=>{const row=e.target.closest(".srow");if(!row)return;const k=row.dataset.key;
   if(e.target.matches("[data-st]")){if(e.target.value)P.slotType[k]=e.target.value;else delete P.slotType[k];saveP();renderPlan();return}
   if(e.target.matches("[data-nm]")){saveP();renderPlan()}});
 $("slots").addEventListener("input",e=>{if(!e.target.matches("[data-nm]"))return;const k=e.target.closest(".srow").dataset.key,v=e.target.value.trim().slice(0,20);
-  if(v)P.names[k]=v;else delete P.names[k];saveP();renderPlanSoon(true)});
+  if(v)P.names[k]=v;else delete P.names[k];delete P.namePin[k];saveP();renderPlanSoon(true)});
 $("members").addEventListener("input",()=>{P.members=[...new Set($("members").value.split(/[,，、\n]+/).map(x=>x.trim().slice(0,20)).filter(Boolean))].slice(0,20);saveP();renderPlanSoon(true)});
 $("members").addEventListener("change",()=>renderPlan());
+$("unpinAll").onclick=()=>{for(const k of Object.keys(P.namePin))delete P.names[k];P.slotItem={};P.namePin={};saveP();renderPlan();toast("자동 배분으로 돌아갔어요")};
 $("autoNames").onchange=()=>{P.autoNames=$("autoNames").checked;saveP();renderPlan()};
 const fileName=()=>`${S.team}조_연습플랜_${P.from.slice(5).replace("-","")}-${P.to.slice(5).replace("-","")}.png`;
 function blobNow(){return S.blob?Promise.resolve(S.blob):new Promise(r=>(S.cv||drawPlan(S.plan||buildPlan())).toBlob(r,"image/png"))}
