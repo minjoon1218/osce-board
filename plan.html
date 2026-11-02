@@ -119,10 +119,19 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .sblock{border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .sblock-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;background:var(--sunk);font-size:.84rem}
 .sblock-h b{margin-right:auto}
-.srow{display:grid;grid-template-columns:3.2em minmax(4.6em,auto) minmax(0,1fr) minmax(0,8em);gap:6px;align-items:center;padding:6px 10px;border-top:1px solid var(--line);font-size:.84rem}
+.srow{display:grid;grid-template-columns:3.2em minmax(4.6em,auto) minmax(0,1fr) minmax(0,8em) auto;gap:6px;align-items:center;padding:6px 10px;border-top:1px solid var(--line);font-size:.84rem}
 .srow select,.srow input{padding:5px 6px;font-size:.84rem;min-height:32px}
 .srow .dn{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .srow .dn.ov{color:var(--accent-ink)}
+.srow .mv{display:grid;gap:2px}
+.srow .mv button{width:28px;height:16px;border-radius:5px;font-size:.6rem;line-height:1;color:var(--muted);background:var(--sunk)}
+.srow .mv button:hover{color:var(--fg);background:var(--line)}
+@media (max-width:700px){
+  /* 폰: 1줄 = 시간·질환(안 잘리게), 2줄 = 형·이름, 오른쪽 ▲▼ */
+  .srow{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"t dn mv" "st nm mv";gap:4px 8px;padding:7px 8px}
+  .srow>.mono{grid-area:t}.srow>[data-st]{grid-area:st}.srow>.dn{grid-area:dn;white-space:normal;font-size:.92rem}.srow>[data-nm]{grid-area:nm}.srow>.mv{grid-area:mv}
+  .srow .mv button{width:32px;height:26px;font-size:.7rem}
+}
 @media (max-width:700px){.srow select,.srow input{font-size:16px}}
 .manual{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:6px}
 .manual input[type=text]{grid-column:1/-1}
@@ -236,7 +245,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
         <div class="card-b">
           <label class="field"><span>조원 (쉼표로 구분 — 비어 있는 칸에 돌아가며 들어가요)</span><input id="members" placeholder="예: 김민준, 이서연, 박지호, 최유나" autocomplete="off"></label>
           <label class="chk" style="font-size:.84rem"><input type="checkbox" id="autoNames" style="width:auto"> 이름 안 쓴 칸은 조원을 돌아가며 자동 배정(흐린 글자)</label>
-          <div class="hint">시간대마다 형을 정하면 그 시간엔 그 형으로만 짜요. 칸마다 형·이름을 바꿀 수도 있어요(질환은 자동으로 다시 맞춰져요).</div>
+          <div class="hint">시간대마다 형을 정하면 그 시간엔 그 형으로만 짜요. 칸마다 형·이름을 바꿀 수도 있어요(질환은 자동으로 다시 맞춰져요). <b>▲▼로 순서를 바꿀 수 있어요</b>(다른 시간대로도 이동). 바꾼 시간대는 그 순서로 고정되고, 시간대 오른쪽 '순서 초기화'로 자동 배분으로 되돌려요.</div>
           <datalist id="memberList"></datalist>
           <div id="slots" style="display:grid;gap:10px"></div>
         </div>
@@ -273,7 +282,7 @@ const tcol=i=>TCOL[i%TCOL.length];
 const S={code:"",role:"",team:"",teamList:[],bookings:[],loaded:false,blob:null,plan:null};
 let P=null;   /* 조별 설정(이 기기에 저장) */
 const defaults=()=>({types:[{id:"A",name:"A형",items:[]},{id:"B",name:"B형",items:[]},{id:"C",name:"C형",items:[]}],
-  from:ymd(),to:addDays(ymd(),13),exam:10,fb:5,buf:10,mix:"mix",days:{},edits:{},manual:[],members:[],autoNames:true,names:{},slotType:{},sesTypes:{}});
+  from:ymd(),to:addDays(ymd(),13),exam:10,fb:5,buf:10,mix:"mix",days:{},edits:{},manual:[],members:[],autoNames:true,names:{},slotType:{},sesTypes:{},slotItem:{}});
 const pkey=()=>"osce-plan-v1-"+(S.team||"_");
 function loadP(){let p=null;try{p=JSON.parse(store(pkey())||"null")}catch(e){}
   const d=defaults();P=Object.assign(d,p||{});
@@ -281,7 +290,7 @@ function loadP(){let p=null;try{p=JSON.parse(store(pkey())||"null")}catch(e){}
   P.types.forEach((t,i)=>{t.id=String(t.id||("T"+i));t.name=String(t.name||"");t.items=Array.isArray(t.items)?t.items.map(String).filter(Boolean):[];t.off=Array.isArray(t.off)?t.off.filter(x=>t.items.includes(x)):[]});
   if(!P.from||P.to<P.from){P.from=d.from;P.to=d.to}
   if(P.to<ymd()&&!p){P.from=d.from;P.to=d.to}
-  P.members=Array.isArray(P.members)?P.members.map(String).filter(Boolean):[];P.autoNames=P.autoNames!==false;["names","slotType","sesTypes"].forEach(k=>{if(!P[k]||typeof P[k]!=="object")P[k]={}});
+  P.members=Array.isArray(P.members)?P.members.map(String).filter(Boolean):[];P.autoNames=P.autoNames!==false;["names","slotType","sesTypes","slotItem"].forEach(k=>{if(!P[k]||typeof P[k]!=="object")P[k]={}});
   P.days=P.days||{};P.wd=P.wd&&typeof P.wd==="object"?P.wd:{};P.edits=P.edits||{};P.manual=Array.isArray(P.manual)?P.manual:[];}
 let saveT;function saveP(){clearTimeout(saveT);saveT=setTimeout(()=>store(pkey(),JSON.stringify(P)),200)}
 
@@ -324,6 +333,8 @@ function buildPlan(){
   const all=[];types.forEach(t=>onItems(t).forEach((name,j)=>all.push({t:t.id,name,key:t.id+"|"+name,ord:order[t.id]*100+j})));
   const count={},last={},typeLastDay={};all.forEach(x=>{count[x.key]=0;last[x.key]=-1});
   const ses=sessions().filter(s=>!s.off),byDay={};ses.forEach(s=>(byDay[s.date]=byDay[s.date]||[]).push(s));
+  /* 11/02 dw: 순서를 바꾼 시간대는 칸마다 질환 고정(slotItem) — 그 자리에서 셈(앞 시간대 배분은 그대로) */
+  const byKey=Object.fromEntries(all.map(x=>[x.key,x])),pinOf=k=>byKey[P.slotItem[k]]||null;
   let tick=0,prevType=null,prevName=null;const days=[],memCount={};
   const avg=t=>{const it=all.filter(x=>x.t===t.id);return it.reduce((a,x)=>a+count[x.key],0)/it.length};
   Object.keys(byDay).sort().forEach((date,di)=>{
@@ -346,8 +357,9 @@ function buildPlan(){
       for(let k=0;k<n;k++){
         const key=s.id+"#"+k,ov=order[P.slotType[key]]!=null?P.slotType[key]:null;   /* 칸별 형 */
         const allow=new Set(ov?[ov]:sesAllow);
-        const cand=all.filter(x=>allow.has(x.t));let pick=null;
-        if(cand.length){
+        const cand=all.filter(x=>allow.has(x.t));let pick=null;const pin=pinOf(key);
+        if(pin){pick=pin;count[pick.key]++;last[pick.key]=tick++;used.add(pick.key);prevType=pick.t}
+        else if(cand.length){
           cand.sort((a,b)=>count[a.key]-count[b.key]||(used.has(a.key)?1:0)-(used.has(b.key)?1:0)
             ||(allow.size>1?((a.t===prevType?1:0)-(b.t===prevType?1:0)):0)||last[a.key]-last[b.key]||a.ord-b.ord);
           pick=cand[0];count[pick.key]++;last[pick.key]=tick++;used.add(pick.key);prevType=pick.t;
@@ -357,7 +369,7 @@ function buildPlan(){
         const manual=String(P.names[key]||"").trim();let who=manual;
         if(!who&&P.autoNames&&P.members.length){who=P.members.slice().sort((a,b)=>(memCount[a]||0)-(memCount[b]||0)||(a===prevName?1:0)-(b===prevName?1:0)||P.members.indexOf(a)-P.members.indexOf(b))[0]}
         if(who){memCount[who]=(memCount[who]||0)+1;prevName=who}
-        slots.push({key,start:t0,examEnd:t0+P.exam,end:t0+P.exam+P.fb,item:pick,typeOv:ov,name:who,nameManual:!!manual});t0+=P.exam+P.fb;
+        slots.push({key,start:t0,examEnd:t0+P.exam,end:t0+P.exam+P.fb,item:pick,typeOv:ov,pinned:!!pin,name:who,nameManual:!!manual});t0+=P.exam+P.fb;
       }
       day.sessions.push({...s,slots,sesTypes:sesSel,spare:s.end-s.start-n*(P.exam+P.fb)});
     }
@@ -602,6 +614,7 @@ function renderSlots(plan){
   if(sig===slotSig&&$("slots").querySelector(".srow")){
     for(const d of plan.days)for(const x of d.sessions){
       const pk=$("slots").querySelector(`.pick[data-ses="${CSS.escape(x.id)}"]`);
+      const up=$("slots").querySelector(`[data-unpin="${CSS.escape(x.id)}"]`);if(up)up.hidden=!x.slots.some(z=>z.pinned);
       if(pk)pk.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.hasAttribute("data-auto")?!x.sesTypes.length:x.sesTypes.includes(b.dataset.type))));
       for(const sl of x.slots){const row=$("slots").querySelector(`.srow[data-key="${CSS.escape(sl.key)}"]`);if(!row)continue;
         const st=row.querySelector("[data-st]");if(document.activeElement!==st)st.value=sl.typeOv||"";
@@ -613,14 +626,31 @@ function renderSlots(plan){
   slotSig=sig;
   $("slots").innerHTML=plan.days.map(d=>d.sessions.map(s=>{
     const chips=`<div class="pick" data-ses="${esc(s.id)}"><button type="button" data-auto aria-pressed="${!s.sesTypes.length}">자동</button>${types.map(t=>`<button type="button" data-type="${esc(t.id)}" style="${typeStyle(typeIndex(t.id))}" aria-pressed="${s.sesTypes.includes(t.id)}">${esc(t.name||t.id)}</button>`).join("")}</div>`;
-    return `<div class="sblock"><div class="sblock-h"><b>${md(d.date)} <span class="mono">${fmt(s.start)}–${fmt(s.end)}</span> · ${esc(s.place)}</b>${chips}</div>${s.slots.map(sl=>`<div class="srow" data-key="${esc(sl.key)}">
+    return `<div class="sblock"><div class="sblock-h"><b>${md(d.date)} <span class="mono">${fmt(s.start)}–${fmt(s.end)}</span> · ${esc(s.place)}</b><button type="button" class="btn sm ghost" data-unpin="${esc(s.id)}"${s.slots.some(x=>x.pinned)?"":" hidden"}>순서 초기화</button>${chips}</div>${s.slots.map(sl=>`<div class="srow" data-key="${esc(sl.key)}">
       <span class="mono">${fmt(sl.start)}</span>
       <select data-st aria-label="${fmt(sl.start)} 형"><option value="">자동</option>${types.map(t=>`<option value="${esc(t.id)}"${sl.typeOv===t.id?" selected":""}>${esc(t.name||t.id)}</option>`).join("")}</select>
       <span class="dn${sl.typeOv?" ov":""}">${sl.item?esc(sl.item.name):"<span class=hint>자유 연습</span>"}</span>
       <input data-nm list="memberList" value="${sl.nameManual?esc(sl.name):""}" placeholder="${sl.name&&!sl.nameManual?esc(sl.name):"이름"}" title="흐린 글자 = 자동 배정" aria-label="${fmt(sl.start)} 이름" autocomplete="off">
+      <span class="mv"><button type="button" data-mv="-1" aria-label="${fmt(sl.start)} 위로">▲</button><button type="button" data-mv="1" aria-label="${fmt(sl.start)} 아래로">▼</button></span>
     </div>`).join("")}</div>`}).join("")).join("");
 }
-$("slots").addEventListener("click",e=>{const b=e.target.closest(".pick button");if(!b)return;const sid=b.parentElement.dataset.ses;let sel=(P.sesTypes[sid]||[]).slice();
+$("slots").addEventListener("click",e=>{
+  const mv=e.target.closest("[data-mv]");
+  if(mv){const flat=(S.plan||buildPlan()).days.flatMap(d=>d.sessions.flatMap(x=>x.slots));const k=mv.closest(".srow").dataset.key;
+    const i=flat.findIndex(x=>x.key===k),j=i+Number(mv.dataset.mv);if(i<0||j<0||j>=flat.length)return;
+    const a=flat[i],b=flat[j];
+    const setOr=(o,key,v)=>{if(v)o[key]=v;else delete o[key]};
+    /* 두 칸이 속한 시간대는 지금 보이는 순서 그대로 고정한 뒤 맞바꿈 → 다른 칸·다른 시간대는 안 바뀜 */
+    const sidOf=x=>x.key.slice(0,x.key.lastIndexOf("#")),sids=new Set([sidOf(a),sidOf(b)]);
+    for(const x of flat)if(sids.has(sidOf(x))&&x.item&&!P.slotItem[x.key])P.slotItem[x.key]=x.item.key;
+    setOr(P.slotItem,a.key,b.item&&b.item.key);setOr(P.slotItem,b.key,a.item&&a.item.key);
+    const ta=P.slotType[a.key],tb=P.slotType[b.key];setOr(P.slotType,a.key,tb);setOr(P.slotType,b.key,ta);
+    const na=P.names[a.key],nb=P.names[b.key];setOr(P.names,a.key,nb);setOr(P.names,b.key,na);
+    saveP();renderPlan();
+    const moved=$("slots").querySelector(`.srow[data-key="${CSS.escape(b.key)}"] [data-mv="${mv.dataset.mv}"]`);if(moved)moved.focus({preventScroll:true});return}
+  const un=e.target.closest("[data-unpin]");
+  if(un){const sid=un.dataset.unpin;for(const k of Object.keys(P.slotItem))if(k.startsWith(sid+"#"))delete P.slotItem[k];saveP();renderPlan();return}
+  const b=e.target.closest(".pick button");if(!b)return;const sid=b.parentElement.dataset.ses;let sel=(P.sesTypes[sid]||[]).slice();
   if(b.hasAttribute("data-auto"))sel=[];else{const id=b.dataset.type;sel=sel.includes(id)?sel.filter(x=>x!==id):sel.concat(id)}
   if(sel.length)P.sesTypes[sid]=sel;else delete P.sesTypes[sid];saveP();renderPlan()});
 $("slots").addEventListener("change",e=>{const row=e.target.closest(".srow");if(!row)return;const k=row.dataset.key;
