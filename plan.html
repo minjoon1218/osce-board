@@ -94,8 +94,11 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .type-h .n{font-size:.76rem;color:var(--muted);margin-right:auto}
 .dz{display:flex;flex-wrap:wrap;gap:6px}
 .dz span{display:inline-flex;align-items:center;gap:4px;border-radius:99px;padding:3px 6px 3px 11px;font-size:.84rem;font-weight:600;background:var(--tb);color:var(--ti)}
-.dz span button{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:.8rem;opacity:.7}
-.dz span button:hover{opacity:1;background:rgba(0,0,0,.08)}
+.dz span .tg-item{font-weight:600;font-size:.84rem;color:inherit;padding:0}
+.dz span.off{background:transparent;color:var(--muted);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.dz span.off .tg-item{text-decoration:line-through;text-decoration-color:var(--faint)}
+.dz span .x{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:.8rem;opacity:.55}
+.dz span .x:hover{opacity:1;background:rgba(0,0,0,.08)}
 .addrow{display:flex;gap:6px}
 .addrow input{flex:1}
 /* 세션 목록 */
@@ -165,7 +168,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
       <section class="card">
         <div class="card-h"><h2>① 형 · 연습할 질환</h2><span class="meta" id="typeMeta"></span></div>
         <div class="card-b">
-          <div class="hint">형마다 연습할 질환을 넣으면, 기간 안에서 질환마다 고르게 돌아가도록 배분해요. 여러 개는 쉼표로 한 번에 넣을 수 있어요.</div>
+          <div class="hint">형마다 연습할 질환을 넣으면, 기간 안에서 질환마다 고르게 돌아가도록 배분해요. 여러 개는 쉼표로 한 번에. 넣은 질환은 목록에 계속 저장돼요 — <b>질환 이름을 누르면 이번 플랜에서 뺐다 넣었다</b>, ✕는 목록에서 지우기.</div>
           <div id="types" style="display:grid;gap:10px"></div>
           <button class="btn sm" type="button" id="addType" style="justify-self:start">+ 형 추가</button>
         </div>
@@ -275,7 +278,7 @@ const pkey=()=>"osce-plan-v1-"+(S.team||"_");
 function loadP(){let p=null;try{p=JSON.parse(store(pkey())||"null")}catch(e){}
   const d=defaults();P=Object.assign(d,p||{});
   if(!Array.isArray(P.types)||!P.types.length)P.types=d.types;
-  P.types.forEach((t,i)=>{t.id=String(t.id||("T"+i));t.name=String(t.name||"");t.items=Array.isArray(t.items)?t.items.map(String).filter(Boolean):[]});
+  P.types.forEach((t,i)=>{t.id=String(t.id||("T"+i));t.name=String(t.name||"");t.items=Array.isArray(t.items)?t.items.map(String).filter(Boolean):[];t.off=Array.isArray(t.off)?t.off.filter(x=>t.items.includes(x)):[]});
   if(!P.from||P.to<P.from){P.from=d.from;P.to=d.to}
   if(P.to<ymd()&&!p){P.from=d.from;P.to=d.to}
   P.members=Array.isArray(P.members)?P.members.map(String).filter(Boolean):[];P.autoNames=P.autoNames!==false;["names","slotType","sesTypes"].forEach(k=>{if(!P[k]||typeof P[k]!=="object")P[k]={}});
@@ -313,10 +316,12 @@ const lead=()=>Math.round(P.buf/2/5)*5;
 const slotCount=s=>s.end>s.start?Math.max(0,Math.floor((s.end-s.start-P.buf)/(P.exam+P.fb))):0;
 
 /* ================= 배분 ================= */
-function activeTypes(){return P.types.filter(t=>t.items.length)}
+/* 11/02 dw: 한 번 넣은 질환은 형 목록에 계속 저장, 눌러서 이번 플랜에 넣었다 뺐다(off) */
+const onItems=t=>t.items.filter(x=>!(t.off||[]).includes(x));
+function activeTypes(){return P.types.filter(t=>onItems(t).length)}
 function buildPlan(){
   const types=activeTypes(),order={};types.forEach((t,i)=>order[t.id]=i);
-  const all=[];types.forEach(t=>t.items.forEach((name,j)=>all.push({t:t.id,name,key:t.id+"|"+name,ord:order[t.id]*100+j})));
+  const all=[];types.forEach(t=>onItems(t).forEach((name,j)=>all.push({t:t.id,name,key:t.id+"|"+name,ord:order[t.id]*100+j})));
   const count={},last={},typeLastDay={};all.forEach(x=>{count[x.key]=0;last[x.key]=-1});
   const ses=sessions().filter(s=>!s.off),byDay={};ses.forEach(s=>(byDay[s.date]=byDay[s.date]||[]).push(s));
   let tick=0,prevType=null,prevName=null;const days=[],memCount={};
@@ -367,20 +372,21 @@ function typeIndex(id){return Math.max(0,P.types.findIndex(t=>t.id===id))}
 function typeStyle(i){const c=tcol(i);return `--tc:${c[0]};--tb:${c[1]};--ti:${c[2]}`}
 function renderTypes(){
   $("types").innerHTML=P.types.map((t,i)=>`<div class="type" style="${typeStyle(i)}" data-t="${esc(t.id)}">
-    <div class="type-h"><input value="${esc(t.name)}" data-name aria-label="형 이름" maxlength="12"><span class="n">${t.items.length}개</span>${P.types.length>1?`<button class="btn sm ghost" type="button" data-deltype>삭제</button>`:""}</div>
-    <div class="dz">${t.items.map((x,j)=>`<span>${esc(x)}<button type="button" data-del="${j}" aria-label="${esc(x)} 빼기">✕</button></span>`).join("")||`<span class="hint" style="background:none;padding:0">아직 없어요</span>`}</div>
+    <div class="type-h"><input value="${esc(t.name)}" data-name aria-label="형 이름" maxlength="12"><span class="n">${onItems(t).length}/${t.items.length}개 사용</span>${P.types.length>1?`<button class="btn sm ghost" type="button" data-deltype>삭제</button>`:""}</div>
+    <div class="dz">${t.items.map((x,j)=>{const off=(t.off||[]).includes(x);return `<span class="${off?"off":""}"><button type="button" class="tg-item" data-tog="${j}" aria-pressed="${!off}" title="${off?"눌러서 이번 플랜에 넣기":"눌러서 이번 플랜에서 빼기(목록엔 남음)"}">${off?"":"✓ "}${esc(x)}</button><button type="button" class="x" data-del="${j}" aria-label="${esc(x)} 목록에서 지우기" title="목록에서 지우기">✕</button></span>`}).join("")||`<i class="hint" style="font-style:normal">아직 없어요</i>`}</div>
     <div class="addrow"><input data-add placeholder="${i===0?"예: 치주염, 치아우식, 치수염":"질환 이름 (쉼표로 여러 개)"}" aria-label="${esc(t.name)} 질환 추가"><button class="btn sm" type="button" data-addbtn>추가</button></div>
   </div>`).join("");
-  const n=P.types.reduce((a,t)=>a+t.items.length,0);$("typeMeta").textContent=n?`질환 ${n}개`:"";
+  const n=P.types.reduce((a,t)=>a+t.items.length,0),u=P.types.reduce((a,t)=>a+onItems(t).length,0);$("typeMeta").textContent=n?`사용 ${u} / 저장 ${n}`:"";
   renderWd();
 }
 function addItems(tid,text){const t=P.types.find(x=>x.id===tid);if(!t)return;
   const parts=String(text).split(/[,\n，、·]+/).map(s=>s.trim()).filter(Boolean);let added=0;
-  for(const p of parts){if(!t.items.includes(p)&&t.items.length<30){t.items.push(p.slice(0,30));added++}}
+  for(const p0 of parts){const p=p0.slice(0,30);if(t.items.includes(p)){if((t.off||[]).includes(p)){t.off=t.off.filter(x=>x!==p);added++}}else if(t.items.length<40){t.items.push(p);added++}}
   if(added){saveP();renderTypes();renderDays();renderPlan();const inp=document.querySelector(`.type[data-t="${CSS.escape(tid)}"] [data-add]`);if(inp)inp.focus()}}
 $("types").addEventListener("click",e=>{
   const card=e.target.closest(".type");if(!card)return;const tid=card.dataset.t,t=P.types.find(x=>x.id===tid);
-  const del=e.target.closest("[data-del]");if(del){t.items.splice(Number(del.dataset.del),1);saveP();renderTypes();renderDays();renderPlan();return}
+  const tog=e.target.closest("[data-tog]");if(tog){const x=t.items[Number(tog.dataset.tog)];t.off=t.off||[];t.off=t.off.includes(x)?t.off.filter(y=>y!==x):t.off.concat(x);saveP();renderTypes();renderDays();renderPlan();return}
+  const del=e.target.closest("[data-del]");if(del){const x=t.items[Number(del.dataset.del)];if(!confirm(`'${x}'을(를) ${t.name||"이 형"} 목록에서 지울까요? (잠깐 빼려면 질환 이름을 누르세요)`))return;t.items.splice(Number(del.dataset.del),1);t.off=(t.off||[]).filter(y=>y!==x);saveP();renderTypes();renderDays();renderPlan();return}
   if(e.target.closest("[data-addbtn]")){const inp=card.querySelector("[data-add]");addItems(tid,inp.value);inp.value="";return}
   if(e.target.closest("[data-deltype]")){if(t.items.length&&!confirm(`${t.name||"이 형"}과 질환 ${t.items.length}개를 지울까요?`))return;
     P.types=P.types.filter(x=>x.id!==tid);for(const d in P.days)P.days[d]=P.days[d].filter(id=>id!==tid);for(const w in P.wd)P.wd[w]=P.wd[w].filter(id=>id!==tid);for(const k in P.sesTypes)P.sesTypes[k]=P.sesTypes[k].filter(id=>id!==tid);for(const k in P.slotType)if(P.slotType[k]===tid)delete P.slotType[k];saveP();renderTypes();renderDays();renderPlan()}
