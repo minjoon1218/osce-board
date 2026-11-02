@@ -81,6 +81,7 @@ input::-webkit-date-and-time-value{text-align:left}
 @media (max-width:700px){input,select,textarea{font-size:16px}}
 input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .unit{display:flex;align-items:center;gap:6px}.unit input{text-align:center}.unit em{font-style:normal;font-size:.8rem;color:var(--muted);flex:none}
+.seg.seg4{grid-template-columns:1fr 1fr}.seg.seg4 button{padding:7px 4px}
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--sunk);padding:3px;border-radius:10px}
 .seg button{padding:7px 0;border-radius:8px;font-weight:600;font-size:.86rem;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.1)}
@@ -216,8 +217,8 @@ body.dragging-on,body.dragging-on *{cursor:grabbing!important;user-select:none!i
             <label class="field"><span>준비·정리 여유</span><span class="unit"><input type="number" id="buf" min="0" max="90" inputmode="numeric"><em>분</em></span></label>
           </div>
           <div class="hint" id="slotHint"></div>
-          <div class="field"><span>하루에 여러 형</span>
-            <div class="seg" id="mix"><button type="button" data-v="mix">섞어서<small>하루에 A·B·C 번갈아</small></button><button type="button" data-v="one">하루 한 형<small>날마다 형 하나씩 돌아가며</small></button></div>
+          <div class="field"><span>형 배치 방식</span>
+            <div class="seg seg4" id="mix"><button type="button" data-v="mix">번갈아<small>A·B·C·A·B…</small></button><button type="button" data-v="group">형끼리 묶어서<small>시간대 안에서 A끼리 → B끼리</small></button><button type="button" data-v="ses">시간대마다 한 형<small>예약 시간 하나 = 형 하나</small></button><button type="button" data-v="one">하루 한 형<small>날마다 형 하나</small></button></div>
             <span class="hint">요일이나 날짜마다 형을 정하면 그날은 그 형으로만 짜요(여러 개 고르면 그날은 섞어서). 우선순위: 날짜 지정 → 요일 지정 → 위 설정.</span>
           </div>
           <details id="wdBox">
@@ -364,7 +365,7 @@ function buildPlan(){
   const ses=sessions().filter(s=>!s.off),byDay={};ses.forEach(s=>(byDay[s.date]=byDay[s.date]||[]).push(s));
   /* 11/02 dw: 순서를 바꾼 시간대는 칸마다 질환 고정(slotItem) — 그 자리에서 셈(앞 시간대 배분은 그대로) */
   const byKey=Object.fromEntries(all.map(x=>[x.key,x])),pinOf=k=>byKey[P.slotItem[k]]||null;
-  let tick=0,prevType=null,prevName=null;const days=[],memCount={},period={};
+  let tick=0,prevType=null,prevName=null,prevSesType=null;const days=[],memCount={},period={};
   /* 11/02 dw: 지난 연습 기록(hist, 시간이 지난 칸이 자동으로 쌓임) + 조장 조정(adjD·adjP)을 출발점으로 → 앞으로는 합계가 적은 질환·사람부터 */
   const planKeys=new Set();ses.forEach(s=>{for(let k=0,n=slotCount(s);k<n;k++)planKeys.add(s.id+"#"+k)});
   for(const [k,h] of Object.entries(P.hist))if(!planKeys.has(k)){count[h.k]=(count[h.k]||0)+1;if(h.w)memCount[h.w]=(memCount[h.w]||0)+1}
@@ -386,8 +387,14 @@ function buildPlan(){
     const day={date,types:chosen,auto,sessions:[]},dayTypes=[];
     for(const s of byDay[date]){
       const sesSel=(P.sesTypes[s.id]||[]).filter(id=>order[id]!=null);   /* 시간대(예약)별 형 */
-      const sesAllow=sesSel.length?sesSel:chosen;
-      const n=slotCount(s),slots=[],used=new Set();let t0=s.start+lead();
+      let sesAllow=sesSel.length?sesSel:chosen;
+      /* 11/02 dw: '시간대마다 한 형' — 자동인 시간대는 질환당 평균 횟수가 적은 형 하나로 통일 */
+      if(!sesSel.length&&auto&&P.mix==="ses"&&types.length){
+        const best=types.slice().sort((a,b)=>avg(a)-avg(b)||(a.id===prevSesType?1:0)-(b.id===prevSesType?1:0)||order[a.id]-order[b.id])[0];
+        sesAllow=[best.id];prevSesType=best.id;
+      }
+      const n=slotCount(s),slots=[],used=new Set(),picks=[];
+      const noAlt=P.mix==="group";   /* 형끼리 묶기: 번갈아 고르지 않고 나중에 형 순서로 정렬 */
       for(let k=0;k<n;k++){
         const key=s.id+"#"+k,ov=order[P.slotType[key]]!=null?P.slotType[key]:null;   /* 칸별 형 */
         const allow=new Set(ov?[ov]:sesAllow);
@@ -396,9 +403,18 @@ function buildPlan(){
         else if(pin){pick=pin;count[pick.key]++;last[pick.key]=tick++;used.add(pick.key);prevType=pick.t}
         else if(cand.length){
           cand.sort((a,b)=>count[a.key]-count[b.key]||(used.has(a.key)?1:0)-(used.has(b.key)?1:0)
-            ||(allow.size>1?((a.t===prevType?1:0)-(b.t===prevType?1:0)):0)||last[a.key]-last[b.key]||a.ord-b.ord);
+            ||(allow.size>1&&!noAlt?((a.t===prevType?1:0)-(b.t===prevType?1:0)):0)||last[a.key]-last[b.key]||a.ord-b.ord);
           pick=cand[0];count[pick.key]++;last[pick.key]=tick++;used.add(pick.key);prevType=pick.t;
         }
+        picks.push({key,ov,pin,h,pick});
+      }
+      /* 형끼리 묶기: 고정·기록·칸 형 지정이 없는 시간대만 A → B → C 순으로 모아서 */
+      if(noAlt&&!picks.some(x=>x.ov||x.pin||x.h)){
+        const items=picks.map(x=>x.pick).map((it,i)=>({it,i})).sort((a,b)=>(a.it?order[a.it.t]:99)-(b.it?order[b.it.t]:99)||a.i-b.i).map(x=>x.it);
+        picks.forEach((x,i)=>x.pick=items[i]);
+      }
+      let t0=s.start+lead();
+      for(const {key,ov,pin,h,pick} of picks){
         if(pick&&!dayTypes.includes(pick.t))dayTypes.push(pick.t);
         /* 이름: 직접 쓴 이름 우선, 비어 있으면 조원 중 가장 적게 맡은 사람(바로 앞 사람 피함) */
         const manual=h?(h.w||""):String(P.names[key]||"").trim();let who=manual;
