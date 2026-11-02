@@ -112,6 +112,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .ses .chk{display:flex;align-items:center;gap:4px;font-size:.76rem;color:var(--muted);white-space:nowrap}
 .ses .chk input{width:auto}
 .empty{padding:14px;text-align:center;color:var(--muted);font-size:.86rem;border:1px dashed var(--line-strong);border-radius:10px}
+.wdrow{display:flex;align-items:center;gap:8px}.wdrow b{width:1.6em;font-size:.86rem;flex:none}.wdrow b.sun{color:var(--out)}.wdrow b.sat{color:#3b6fd6}
 .manual{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:6px}
 .manual input[type=text]{grid-column:1/-1}
 /* 미리보기 */
@@ -178,8 +179,12 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
           <div class="hint" id="slotHint"></div>
           <div class="field"><span>하루에 여러 형</span>
             <div class="seg" id="mix"><button type="button" data-v="mix">섞어서<small>하루에 A·B·C 번갈아</small></button><button type="button" data-v="one">하루 한 형<small>날마다 형 하나씩 돌아가며</small></button></div>
-            <span class="hint">날짜마다 아래에서 형을 직접 고르면 그날은 고른 형으로만 짜요(여러 개 고르면 그날은 섞어서).</span>
+            <span class="hint">요일이나 날짜마다 형을 정하면 그날은 그 형으로만 짜요(여러 개 고르면 그날은 섞어서). 우선순위: 날짜 지정 → 요일 지정 → 위 설정.</span>
           </div>
+          <details id="wdBox">
+            <summary class="hint" style="cursor:pointer;font-weight:600">요일별로 형 정하기 <span id="wdSum"></span></summary>
+            <div id="wdRows" style="display:grid;gap:6px;margin-top:8px"></div>
+          </details>
         </div>
       </section>
 
@@ -255,7 +260,7 @@ function loadP(){let p=null;try{p=JSON.parse(store(pkey())||"null")}catch(e){}
   P.types.forEach((t,i)=>{t.id=String(t.id||("T"+i));t.name=String(t.name||"");t.items=Array.isArray(t.items)?t.items.map(String).filter(Boolean):[]});
   if(!P.from||P.to<P.from){P.from=d.from;P.to=d.to}
   if(P.to<ymd()&&!p){P.from=d.from;P.to=d.to}
-  P.days=P.days||{};P.edits=P.edits||{};P.manual=Array.isArray(P.manual)?P.manual:[];}
+  P.days=P.days||{};P.wd=P.wd&&typeof P.wd==="object"?P.wd:{};P.edits=P.edits||{};P.manual=Array.isArray(P.manual)?P.manual:[];}
 let saveT;function saveP(){clearTimeout(saveT);saveT=setTimeout(()=>store(pkey(),JSON.stringify(P)),200)}
 
 /* ================= 데이터 ================= */
@@ -269,7 +274,7 @@ const api={
   async bookings(team,from,to){
     if(!LIVE){let db=null;try{db=JSON.parse(store("osce-demo-v7")||"null")}catch(e){}return ((db&&db.bookings)||[]).filter(b=>b.team===team&&b.date>=from&&b.date<=to).map(b=>({id:b.id,date:b.date,room:b.room,start:b.start,end:b.end,content:b.content||""}))}
     const {data,error}=await sb.from("bookings").select("id,date,room,start_min,end_min,team,content").eq("team",team).gte("date",from).lte("date",to).order("date").order("start_min").limit(500);
-    if(error)throw error;return data.map(r=>({id:r.id,date:r.date,room:r.room,start:r.start_min,end:r.end_min,content:r.content||""}))}
+    if(error)throw error;return data.filter(r=>r.date>=from&&r.date<=to).map(r=>({id:r.id,date:r.date,room:r.room,start:r.start_min,end:r.end_min,content:r.content||""}))}
 };
 async function loadBookings(){
   if(!S.team)return;
@@ -298,7 +303,9 @@ function buildPlan(){
   let tick=0,prevType=null;const days=[];
   const avg=t=>{const it=all.filter(x=>x.t===t.id);return it.reduce((a,x)=>a+count[x.key],0)/it.length};
   Object.keys(byDay).sort().forEach((date,di)=>{
-    let chosen=(P.days[date]||[]).filter(id=>order[id]!=null),auto=!chosen.length;
+    let chosen=(P.days[date]||[]).filter(id=>order[id]!=null);
+    if(!chosen.length)chosen=(P.wd[parseYmd(date).getDay()]||[]).filter(id=>order[id]!=null);   /* 요일 지정 */
+    let auto=!chosen.length;
     if(auto){
       if(P.mix==="one"&&types.length){
         const need=byDay[date].reduce((a,s)=>a+slotCount(s),0);
@@ -336,6 +343,7 @@ function renderTypes(){
     <div class="addrow"><input data-add placeholder="${i===0?"예: 치주염, 치아우식, 치수염":"질환 이름 (쉼표로 여러 개)"}" aria-label="${esc(t.name)} 질환 추가"><button class="btn sm" type="button" data-addbtn>추가</button></div>
   </div>`).join("");
   const n=P.types.reduce((a,t)=>a+t.items.length,0);$("typeMeta").textContent=n?`질환 ${n}개`:"";
+  renderWd();
 }
 function addItems(tid,text){const t=P.types.find(x=>x.id===tid);if(!t)return;
   const parts=String(text).split(/[,\n，、·]+/).map(s=>s.trim()).filter(Boolean);let added=0;
@@ -346,7 +354,7 @@ $("types").addEventListener("click",e=>{
   const del=e.target.closest("[data-del]");if(del){t.items.splice(Number(del.dataset.del),1);saveP();renderTypes();renderDays();renderPlan();return}
   if(e.target.closest("[data-addbtn]")){const inp=card.querySelector("[data-add]");addItems(tid,inp.value);inp.value="";return}
   if(e.target.closest("[data-deltype]")){if(t.items.length&&!confirm(`${t.name||"이 형"}과 질환 ${t.items.length}개를 지울까요?`))return;
-    P.types=P.types.filter(x=>x.id!==tid);for(const d in P.days)P.days[d]=P.days[d].filter(id=>id!==tid);saveP();renderTypes();renderDays();renderPlan()}
+    P.types=P.types.filter(x=>x.id!==tid);for(const d in P.days)P.days[d]=P.days[d].filter(id=>id!==tid);for(const w in P.wd)P.wd[w]=P.wd[w].filter(id=>id!==tid);saveP();renderTypes();renderDays();renderPlan()}
 });
 $("types").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.matches("[data-add]")&&!e.isComposing){e.preventDefault();const tid=e.target.closest(".type").dataset.t;addItems(tid,e.target.value);e.target.value=""}});
 $("types").addEventListener("input",e=>{if(e.target.matches("[data-name]")){const t=P.types.find(x=>x.id===e.target.closest(".type").dataset.t);t.name=e.target.value.trim();saveP();renderDays();renderPlanSoon()}});
@@ -361,7 +369,19 @@ function renderSettings(){
   const per=P.exam+P.fb;
   $("slotHint").innerHTML=`한 케이스 = 시험 <b>${P.exam}분</b> + 피드백 <b>${P.fb}분</b> = ${per}분 · 예약 시간에서 여유 ${P.buf}분을 빼고 채워요 → 1시간이면 <b>${Math.max(0,Math.floor((60-P.buf)/per))}케이스</b>, 2시간이면 <b>${Math.max(0,Math.floor((120-P.buf)/per))}케이스</b>`;
   if(!$("mDate").value)$("mDate").value=P.from>ymd()?P.from:ymd();
+  renderWd();
 }
+function renderWd(){
+  const types=activeTypes(),list=types.length?types:P.types;
+  $("wdRows").innerHTML=[1,2,3,4,5,6,0].map(w=>{const sel=P.wd[w]||[];
+    return `<div class="wdrow"><b class="${w===0?"sun":w===6?"sat":""}">${WD[w]}</b><div class="pick" data-wd="${w}"><button type="button" data-auto aria-pressed="${!sel.length}">자동</button>${list.map(t=>`<button type="button" data-type="${esc(t.id)}" style="${typeStyle(typeIndex(t.id))}" aria-pressed="${sel.includes(t.id)}">${esc(t.name||t.id)}</button>`).join("")}</div></div>`}).join("");
+  const set=[1,2,3,4,5,6,0].filter(w=>(P.wd[w]||[]).length);
+  $("wdSum").textContent=set.length?`· ${set.map(w=>WD[w]+" "+P.wd[w].map(id=>{const t=P.types.find(x=>x.id===id);return t?(t.name||t.id).replace(/형$/,""):id}).join("·")).join(", ")}`:"";
+  if(set.length)$("wdBox").open=true;
+}
+$("wdRows").addEventListener("click",e=>{const b=e.target.closest(".pick button");if(!b)return;const w=b.parentElement.dataset.wd;let sel=(P.wd[w]||[]).slice();
+  if(b.hasAttribute("data-auto"))sel=[];else{const id=b.dataset.type;sel=sel.includes(id)?sel.filter(x=>x!==id):sel.concat(id)}
+  if(sel.length)P.wd[w]=sel;else delete P.wd[w];saveP();renderWd();renderDays();renderPlan()});
 function periodChanged(){
   let f=$("from").value,t=$("to").value;if(!f||!t)return;
   if(t<f){t=f;$("to").value=t}
@@ -381,7 +401,9 @@ function renderDays(){
   const byDay={};list.forEach(s=>(byDay[s.date]=byDay[s.date]||[]).push(s));
   $("days").innerHTML=Object.keys(byDay).sort().map(date=>{
     const sel=P.days[date]||[];
-    const pick=`<div class="pick" data-date="${date}"><button type="button" data-auto aria-pressed="${!sel.length}">자동</button>${types.map(t=>`<button type="button" data-type="${esc(t.id)}" style="${typeStyle(typeIndex(t.id))}" aria-pressed="${sel.includes(t.id)}">${esc(t.name||t.id)}</button>`).join("")}</div>`;
+    const rule=(P.wd[parseYmd(date).getDay()]||[]).filter(id=>types.some(t=>t.id===id));
+    const autoLab=rule.length?"요일("+rule.map(id=>{const t=P.types.find(x=>x.id===id);return esc(t?(t.name||t.id).replace(/형$/,""):id)}).join("·")+")":"자동";
+    const pick=`<div class="pick" data-date="${date}"><button type="button" data-auto aria-pressed="${!sel.length}">${autoLab}</button>${types.map(t=>`<button type="button" data-type="${esc(t.id)}" style="${typeStyle(typeIndex(t.id))}" aria-pressed="${sel.includes(t.id)}">${esc(t.name||t.id)}</button>`).join("")}</div>`;
     return `<div class="day"><div class="day-h"><b>${md(date)}</b>${pick}</div>${byDay[date].map(s=>{
       const n=slotCount(s);
       return `<div class="ses${s.off?" off":""}" data-id="${esc(s.id)}">
