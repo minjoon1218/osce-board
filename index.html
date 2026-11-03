@@ -227,6 +227,10 @@ dl.info dt{color:var(--muted)} dl.info dd{margin:0;min-width:0;overflow-wrap:any
 .ntc.block{background:var(--out-soft);border-color:transparent}
 .ntc.block .tag{background:var(--out);color:#fff}
 .blk-list{display:grid;gap:6px}
+.u-row{display:grid;grid-template-columns:minmax(0,1.4fr) 52px 60px 64px auto;gap:6px;align-items:center;font-size:.84rem}
+.u-row input,.u-row select{padding:6px 6px;min-width:0}
+.u-row .tm{font-size:.74rem;color:var(--muted)}
+.u-head{font-size:.72rem;color:var(--muted)}
 .blk-item{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:.84rem}
 .three{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:8px}
 .chk{display:flex;align-items:center;gap:8px;font-size:.84rem}
@@ -336,9 +340,8 @@ const KITSHORT={anes:"마취",ext:"발치",sut:"봉합",tbi:"TBI",fl:"불소",se
 const SETS=[1,2];
 const DURS=[60,120];
 const OPEN=7*60, CLOSE=23*60;   /* 운영 07:00–23:00 */
-const ROLLOVER=21;   /* 매일 21:00에 다음 날 오픈 (그 전엔 오늘까지만) */
-const DAILY=2;       /* 조당 하루 2회까지 */
-const MAXLEN=180;    /* 연장 포함 한 번 사용 최대 3시간 */
+const ROLLOVER=21;   /* 매일 21:00 + 일차별 시차(open_offsets)에 다음 날 오픈 */
+const MAXLEN=180;    /* 같은 방 연속 사용 최대 3시간 (연장 포함) */
 const WD=["일","월","화","수","목","금","토"];
 
 /* ================= 유틸 ================= */
@@ -368,21 +371,52 @@ const isAdmin=()=>S.role==="admin";
 const canAct=()=>isLeader()||isAdmin();
 const roomInfo=r=>S.rooms[r]||{thomas:true,open:true,memo:""};
 
-/* ---- 예약 가능 기간: 평소엔 오늘까지, 매일 21:00에 다음 날 오픈 + 관리자가 따로 연 날짜(open_dates) ---- */
-function lastBookable(){const n=new Date();let last=addDays(ymd(n),n.getHours()>=ROLLOVER?1:0);
+/* ---- 일차별 오픈 순서 · 단위(같이 연습하는 조 묶음) ---- */
+const ruleOf=t=>(S.rules||{})[t]||null;
+const unitOf=t=>(ruleOf(t)&&ruleOf(t).unit)||t;
+function offsetOf(t){if(!t)return 0;const r=ruleOf(t),o=S.offsets||{};
+  if(r&&r.open_offset!=null)return r.open_offset;if(r&&r.exam_day!=null&&o[r.exam_day]!=null)return o[r.exam_day];return o[0]??0}
+const myTeam=()=>isLeader()?S.team:null;
+/* day 날짜의 오픈 시각(그날 밤 21:00+시차 → 다음 날 신청 열림) */
+function rollAt(day,team){const d=parseYmd(day);d.setHours(ROLLOVER,0,0,0);d.setMinutes(offsetOf(team));return d}
+const openHM=team=>{const m=ROLLOVER*60+offsetOf(team);return fmt(m)};
+/* ---- 예약 가능 기간: 평소엔 오늘까지, 매일 21:00(+일차별 시차)에 다음 날 오픈 + 관리자가 따로 연 날짜(open_dates) ---- */
+function lastBookable(team=myTeam()){const n=new Date();let last=addDays(ymd(n),n>=rollAt(ymd(n),team)?1:0);
   for(const o of S.openDates||[])if(new Date(o.opens_at)<=n&&o.date>last)last=o.date;return last}
 /* 다음에 열리는 날짜와 시각 {date, at:Date} */
-function nextOpen(){const n=new Date(),last=lastBookable(),c=[];
-  const t=ymd(n),rd=new Date(n);rd.setHours(ROLLOVER,0,0,0);if(n>=rd)rd.setDate(rd.getDate()+1);
-  let rDate=addDays(ymd(rd),1);while(rDate<=last){rd.setDate(rd.getDate()+1);rDate=addDays(ymd(rd),1)}
-  c.push({date:rDate,at:rd});
+function nextOpen(team=myTeam()){const n=new Date(),last=lastBookable(team),c=[];
+  let base=ymd(n);if(n>=rollAt(base,team))base=addDays(base,1);
+  while(addDays(base,1)<=last)base=addDays(base,1);
+  c.push({date:addDays(base,1),at:rollAt(base,team)});
   for(const o of S.openDates||[]){const at=new Date(o.opens_at);if(at>n&&o.date>last)c.push({date:o.date,at})}
   c.sort((a,b)=>a.at-b.at);return c[0]}
 function whenText(at){const n=new Date(),d=ymd(at),hm=pad(at.getHours())+":"+pad(at.getMinutes());
   return (d===ymd(n)?"오늘":d===addDays(ymd(n),1)?"내일":md(d))+" "+hm}
-function openTimeFor(date){const o=(S.openDates||[]).find(x=>x.date===date);
-  const rule=parseYmd(addDays(date,-1));rule.setHours(ROLLOVER,0,0,0);
+function openTimeFor(date,team=myTeam()){const o=(S.openDates||[]).find(x=>x.date===date);
+  const rule=rollAt(addDays(date,-1),team);
   if(o){const at=new Date(o.opens_at);return at<rule?at:rule}return rule}
+/* 오픈 순서 문구: "21:00 1·2일차 → 21:10 3일차 → … → 21:40 나머지" */
+function openOrderText(){const o=S.offsets||{},g={};
+  Object.entries(o).forEach(([d,m])=>{if(Number(d)>0)(g[m]=g[m]||[]).push(Number(d))});
+  const parts=Object.keys(g).map(Number).sort((a,b)=>a-b).map(m=>`${fmt(ROLLOVER*60+m)} ${g[m].sort((a,b)=>a-b).join("·")}일차`);
+  if(o[0]!=null)parts.push(`${fmt(ROLLOVER*60+o[0])} 나머지`);
+  return parts.length?parts.join(" → "):"21:00"}
+/* ---- 단위별 하루 상한 · 동시 방 수 · 같은 방 연속 3시간 (DB check_unit_limits와 같은 계산) ---- */
+const unitInfo=u=>(S.units||{})[u]||{daily_min:120,max_rooms:1,people:null};
+const hrs=m=>m%60?String(+(m/60).toFixed(1)):String(m/60);
+function unitCap(u,date){const base=unitInfo(u).daily_min??120;
+  const b=S.blocks.filter(k=>k.date===date).reduce((a,k)=>a+(Math.min(k.end,CLOSE)-Math.max(k.start,OPEN))*(k.rooms||ROOMS).length,0);
+  return Math.floor(base*Math.max(0.5,1-b/(ROOMS.length*(CLOSE-OPEN)))/30)*30}
+const unitBookings=(u,date,ex)=>S.bookings.filter(b=>b.id!==ex&&b.date===date&&unitOf(b.team)===u);
+const unitUsed=(u,date,ex)=>unitBookings(u,date,ex).reduce((a,b)=>a+b.end-b.start,0);
+function unitRun(u,d,room,ex){const l=unitBookings(u,d.date,ex).filter(b=>b.room===room);let s=d.start,e=d.end,f;
+  while((f=l.find(b=>b.end===s)))s=f.start;while((f=l.find(b=>b.start===e)))e=f.end;return e-s}
+function limitCheck(team,d,room,ex){const u=unitOf(team);
+  if(unitUsed(u,d.date,ex)+(d.end-d.start)>unitCap(u,d.date))return "DAILY_CAP";
+  if(unitBookings(u,d.date,ex).filter(b=>overlap(b,d)).length>=(unitInfo(u).max_rooms||1))return "TEAM_BUSY";
+  if(unitRun(u,d,room,ex)>MAXLEN)return "RUN_LIMIT";
+  return ""}
+const unitName=t=>{const u=unitOf(t),ts=Object.values(S.rules||{}).filter(r=>(r.unit||r.team)===u).map(r=>r.team).sort();return ts.length>1?ts.join("·")+"조 합산":t+"조"};
 function dateBookable(d){if(isAdmin())return true;return d>=ymd()&&d<=lastBookable()}
 
 /* ================= 오류 문구 ================= */
@@ -393,6 +427,8 @@ function errText(e){
   if(m.includes("TOO_SHORT"))return "더 줄일 수 없어요. 이미 지난 시간이거나 시작 시간보다 빨라져요.";
   if(m.includes("CLOSE_TIME"))return "23:00 이후로는 연장할 수 없어요.";
   if(m.includes("TOO_LONG"))return "한 번 사용은 연장 포함 최대 3시간이에요.";
+  if(m.includes("DAILY_CAP"))return isLeader()?`${unitName(S.team)} 하루 사용 상한을 넘어요. 시간을 줄이거나 다른 날을 골라 주세요.`:"이 조의 하루 사용 상한을 넘어요.";
+  if(m.includes("RUN_LIMIT"))return "같은 방은 연달아 최대 3시간까지예요. 시간을 띄우거나 다른 방을 골라 주세요.";
   if(m.includes("NOT_YOURS"))return "우리 조 신청만 조정할 수 있어요.";
   if(m.includes("ENDED"))return "이미 끝난 신청은 바꿀 수 없어요.";
   if(m.includes("FIXED_TIME"))return "고정 시간대는 시간·방을 관리자만 바꿀 수 있어요. 재료·연습 내용은 바꿀 수 있어요.";
@@ -404,11 +440,11 @@ function errText(e){
   if(m.includes("NO_DAYS"))return "요일을 하나 이상 골라 주세요.";
   if(m.includes("NO_ROOMS"))return "사용 금지할 방을 하나 이상 골라 주세요.";
   if(m.includes("BAD_RANGE"))return "시작이 끝보다 빨라야 하고, 07:00–23:00 안이어야 해요.";
-  if(m.includes("DAILY_LIMIT"))return "한 조는 하루 2회까지만 신청할 수 있어요.";
-  if(m.includes("TEAM_BUSY"))return "이 조는 이 시간에 이미 다른 방을 신청했어요.";
+  if(m.includes("DAILY_LIMIT"))return "하루 신청 한도를 넘었어요.";
+  if(m.includes("TEAM_BUSY"))return isLeader()?`${unitName(S.team)}는 같은 시간에 방 ${unitInfo(unitOf(S.team)).max_rooms||1}개까지 쓸 수 있어요.`:"이 조는 이 시간에 쓸 수 있는 방 수를 다 썼어요.";
   if(m.includes("KIT_TAKEN"))return "방금 다른 조가 같은 재료 세트를 잡았어요. 재료를 다시 골라 주세요.";
   if(m.includes("BAD_DURATION"))return isAdmin()?"관리자 시간 설정이 DB에 아직 반영 안 됐어요. 업데이트 013 SQL을 실행해 주세요.":"사용 시간은 1시간 또는 2시간만 고를 수 있어요.";
-  if(m.includes("TOO_FAR"))return `${md(lastBookable())}까지만 신청할 수 있어요. 매일 21:00에 다음 날이 열려요.`;
+  if(m.includes("TOO_FAR"))return `${md(lastBookable())}까지만 신청할 수 있어요. ${isLeader()?`우리 조는 매일 ${openHM(S.team)}에`:"매일 밤 일차 순서대로"} 다음 날이 열려요.`;
   if(m.includes("PAST"))return "이미 지난 시간은 신청할 수 없어요.";
   if(m.includes("ROOM_CLOSED"))return "이 방은 지금 사용 불가로 설정돼 있어요.";
   if(m.includes("BAD_TEAM"))return "없는 조예요. 조 이름을 확인해 주세요.";
@@ -442,6 +478,10 @@ if(LIVE){
       const [r,s,k]=await Promise.all([sb.from("rooms").select("*"),sb.from("settings").select("*").eq("key","notice"),sb.from("blocks").select("*").gte("date",addDays(ymd(),-1)).order("date").order("start_min")]);
       try{const fx=await sb.from("fixed_slots").select("*").order("created_at");if(!fx.error)S.fixed=fx.data}catch(e){}
       try{const od=await sb.from("open_dates").select("*").gte("date",ymd());if(!od.error)S.openDates=od.data}catch(e){}
+      try{const [tr,un,of]=await Promise.all([sb.rpc("list_team_rules"),sb.from("units").select("*"),sb.from("open_offsets").select("*")]);
+        if(!tr.error&&tr.data)S.rules=Object.fromEntries(tr.data.map(x=>[x.team,x]));
+        if(!un.error&&un.data)S.units=Object.fromEntries(un.data.map(x=>[x.unit,x]));
+        if(!of.error&&of.data)S.offsets=Object.fromEntries(of.data.map(x=>[x.exam_day,x.offset_min]));}catch(e){}
       if(!k.error)S.blocks=k.data.map(x=>({id:x.id,date:x.date,start:x.start_min,end:x.end_min,reason:x.reason||"",rooms:x.rooms&&x.rooms.length?x.rooms:ROOMS.slice()}));
       if(!r.error)S.rooms=Object.fromEntries(r.data.map(x=>[x.room,x]));
       if(!s.error)S.notice=(s.data[0]&&s.data[0].value)||"";
@@ -458,6 +498,9 @@ if(LIVE){
     async delFixed(id){return await rpc("admin_delete_fixed",{p_code:S.code,p_id:id})},
     async setFixedPeriod(id,from,to){return await rpc("admin_set_fixed_period",{p_code:S.code,p_id:id,p_from:from,p_to:to})},
     async setKits(id,types,series){return await rpc("admin_set_kits",{p_code:S.code,p_id:id,p_kit_types:types,p_series:!!series})},
+    async setTeamRule(team,unit,day){await rpc("admin_set_team_rule",{p_code:S.code,p_team:team,p_unit:unit,p_exam_day:day})},
+    async setUnit(u,v){await rpc("admin_set_unit",{p_code:S.code,p_unit:u,p_people:v.people,p_max_rooms:v.max_rooms,p_daily_min:v.daily_min})},
+    async setOffset(day,min){await rpc("admin_set_offset",{p_code:S.code,p_exam_day:day,p_offset:min})},
     async setRoom(r,v){await rpc("admin_set_room",{p_code:S.code,p_room:r,p_thomas:v.thomas,p_open:v.open,p_memo:v.memo||""})},
     subscribe(){
       let t,ch=null,retry=0,rt;
@@ -466,7 +509,7 @@ if(LIVE){
       const connect=()=>{
         if(ch){try{sb.removeChannel(ch)}catch(e){}}
         ch=sb.channel("osce-"+Date.now());
-        ["bookings","kits","rooms","settings","blocks","open_dates","fixed_slots"].forEach(tb=>ch.on("postgres_changes",{event:"*",schema:"public",table:tb},refresh));
+        ["bookings","kits","rooms","settings","blocks","open_dates","fixed_slots","units","open_offsets"].forEach(tb=>ch.on("postgres_changes",{event:"*",schema:"public",table:tb},refresh));
         ch.subscribe(st=>{
           if(st==="SUBSCRIBED"){if(retry)refresh();retry=0}
           else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT"||st==="CLOSED"){clearTimeout(rt);rt=setTimeout(connect,Math.min(30000,1000*2**Math.min(retry++,5)))}
@@ -500,7 +543,14 @@ if(LIVE){
     async login(code){return who(code)},
     async loadBookings(){S.bookings=db.bookings.slice()},
     async loadKits(){S.kits={...db.kits}},
-    async loadMeta(){S.rooms={...db.rooms};S.notice=db.notice||"";S.blocks=(db.blocks||[]).map(k=>({...k,rooms:k.rooms||ROOMS.slice()}));S.teamList=["A","B","C","D","E","F","G","H"];S.fixed=(db.fixed||[]).slice()},
+    async loadMeta(){S.rooms={...db.rooms};S.notice=db.notice||"";S.blocks=(db.blocks||[]).map(k=>({...k,rooms:k.rooms||ROOMS.slice()}));S.teamList=["A","B","C","D","E","F","G","H"];S.fixed=(db.fixed||[]).slice();
+      S.rules=db.rules||{A:{team:"A",unit:"A+B",exam_day:1},B:{team:"B",unit:"A+B",exam_day:1},C:{team:"C",unit:"C",exam_day:3}};
+      S.units=db.units||{"A+B":{unit:"A+B",people:7,max_rooms:2,daily_min:840},C:{unit:"C",people:10,max_rooms:2,daily_min:960}};
+      S.offsets=db.offsets||{1:0,2:0,3:10,4:20,5:30,0:40};
+      for(const t of S.teamList){const r=S.rules[t]||(S.rules[t]={team:t,unit:t,exam_day:null});r.open_offset=r.exam_day!=null&&S.offsets[r.exam_day]!=null?S.offsets[r.exam_day]:S.offsets[0]}},
+    async setTeamRule(team,unit,day){db.rules=S.rules;db.rules[team]={team,unit:unit||team,exam_day:day};db.units=S.units;if(!db.units[unit||team])db.units[unit||team]={unit:unit||team,people:null,max_rooms:1,daily_min:120};save()},
+    async setUnit(u,v){db.units=S.units;db.units[u]={unit:u,...v};save()},
+    async setOffset(day,min){db.offsets=S.offsets;db.offsets[day]=min;save()},
     async add(b){
       const w=who(S.code);if(!w)throw new Error("NOT_LEADER");
       const team=w.role==="admin"?String(b.team||"").toUpperCase():w.team;
@@ -509,8 +559,7 @@ if(LIVE){
       if(db.rooms[b.room]&&db.rooms[b.room].open===false)throw new Error("ROOM_CLOSED");
       if(w.role!=="admin"&&(db.blocks||[]).some(k=>k.date===b.date&&overlap(k,b)))throw new Error("BLOCKED");
       if(db.bookings.some(x=>x.date===b.date&&x.room===b.room&&overlap(x,b)))throw new Error("23P01");
-      if(w.role!=="admin"&&db.bookings.filter(x=>x.date===b.date&&x.team===team&&!x.fixed).length>=2)throw new Error("DAILY_LIMIT");
-      if(w.role!=="admin"&&db.bookings.some(x=>x.date===b.date&&x.team===team&&overlap(x,b)))throw new Error("TEAM_BUSY");
+      if(w.role!=="admin"){const c=limitCheck(team,b,b.room,null);if(c)throw new Error(c)}
       const r={...b,team,id:"d"+Date.now()+"-"+Math.random().toString(36).slice(2,6)};db.bookings.push(r);save();S.bookings=db.bookings.slice();return r;
     },
     async update(id,nb){const b=db.bookings.find(x=>x.id===id);if(!b)throw new Error("NOT_FOUND");const w=who(S.code);if(!w)throw new Error("NOT_LEADER");
@@ -521,8 +570,7 @@ if(LIVE){
         if(lk){if(db.bookings.some(x=>x.id!==id&&x.date===b.date&&(x.kits||[]).some(k=>(nb.kits||[]).includes(k))&&overlap(x,b)))throw new Error("KIT_TAKEN");
           Object.assign(b,{day:nb.day,content:nb.content,kits:nb.kits});save();S.bookings=db.bookings.slice();return {...b}}}
       if(db.bookings.some(x=>x.id!==id&&x.date===nb.date&&x.room===nb.room&&overlap(x,nb)))throw new Error("23P01");
-      if(w.role!=="admin"&&db.bookings.some(x=>x.id!==id&&x.date===nb.date&&x.team===team&&overlap(x,nb)))throw new Error("TEAM_BUSY");
-      if(w.role!=="admin"&&db.bookings.filter(x=>x.id!==id&&x.date===nb.date&&x.team===team&&!x.fixed).length>=2)throw new Error("DAILY_LIMIT");
+      if(w.role!=="admin"){const c=limitCheck(team,nb,nb.room,id);if(c)throw new Error(c)}
       Object.assign(b,{date:nb.date,room:nb.room,start:nb.start,end:nb.end,day:nb.day,content:nb.content,kits:nb.kits,team});save();S.bookings=db.bookings.slice();return {...b}},
     async adjust(id,delta){const b=db.bookings.find(x=>x.id===id);if(!b)throw new Error("NOT_FOUND");
       const why=adjCheck(b,delta,true);if(why)throw new Error(why);b.end+=delta;save();S.bookings=db.bookings.slice();return b},
@@ -578,13 +626,12 @@ function adjCheck(b,delta,code){
   if(ne>CLOSE)return R("CLOSE_TIME","23시 마감");
   if(!adm&&ne-b.start>MAXLEN)return R("TOO_LONG","최대 3시간");
   if(S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&o.room===b.room&&overlap(o,add)))return R("23P01","다음 신청 있음");
-  if(!adm&&S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&o.team===b.team&&overlap(o,add)))return R("TEAM_BUSY","조 일정 겹침");
+  if(!adm){const c=limitCheck(b.team,{date:b.date,start:b.start,end:ne},b.room,b.id);if(c)return R(c,c==="DAILY_CAP"?"하루 상한":c==="TEAM_BUSY"?"동시 방 수 초과":"같은 방 연속 3시간")}
   if((b.kits||[]).length&&S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&(o.kits||[]).some(k=>b.kits.includes(k))&&overlap(o,add)))return R("KIT_TAKEN","재료 겹침");
   if(!adm&&blockAt(add,b.room))return R("BLOCKED","사용 금지 시간");
   if(!adm&&!roomInfo(b.room).open)return R("ROOM_CLOSED","방 사용 불가");
   return "";
 }
-const teamCount=(date,team,ex)=>S.bookings.filter(b=>b.id!==ex&&b.date===date&&b.team===team&&!b.fixed).length;
 const roomTaken=(d,room,ex)=>S.bookings.filter(b=>b.id!==ex&&b.date===d.date&&b.room===room&&overlap(b,d));
 function kitState(kid){
   const k=S.kits[kid];
@@ -616,7 +663,10 @@ function renderAuth(){
 }
 function renderNotices(){
   const last=lastBookable(),nx=nextOpen();
-  let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">매일 <b>21:00에 다음 날</b> 신청이 열리고, <b>조당 하루 2회</b>까지 가능해요. 지금은 <b>${md(last)}까지</b> 신청할 수 있고, <b>${whenText(nx.at)}</b>에 ${md(nx.date)}이 열려요.</div></div>`;
+  let mine="";
+  if(isLeader()){const u=unitOf(S.team),cap=unitCap(u,S.sel),used=unitUsed(u,S.sel);
+    mine=`<br>우리 조는 <b>${openHM(S.team)}</b>에 열려요 · ${md(S.sel)} ${unitName(S.team)} 사용 <b>${hrs(used)}/${hrs(cap)}시간</b> · 동시 방 ${unitInfo(u).max_rooms||1}개`}
+  let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">매일 밤 일차 순서대로 다음 날 신청이 열려요: <b>${openOrderText()}</b>. 조마다 <b>하루 사용 상한</b>이 있고(수업으로 막힌 날은 자동으로 줄어요), <b>같은 방은 연달아 3시간</b>까지예요. 지금은 <b>${md(last)}까지</b> 신청할 수 있고, <b>${whenText(nx.at)}</b>에 ${md(nx.date)}이 열려요.${mine}</div></div>`;
   const ups=S.blocks.filter(k=>k.date>ymd()||(k.date===ymd()&&k.end>nowMin())).sort((a,b)=>a.date.localeCompare(b.date)||a.start-b.start).slice(0,4);
   if(ups.length)h=`<div class="ntc block"><span class="tag">사용 금지</span><div class="body">${ups.map(k=>`<b>${md(k.date)} ${fmt(k.start)}–${fmt(k.end)} · ${roomsLabel(k.rooms)}</b>${k.reason?" · "+esc(k.reason):""}`).join("<br>")}</div></div>`+h;
   if(S.notice.trim())h=`<div class="ntc admin"><span class="tag">공지</span><div class="body">${esc(S.notice.trim())}</div></div>`+h;
@@ -695,9 +745,10 @@ $("grid").addEventListener("click",e=>{
   if(col.classList.contains("closed")){toast("이 방은 지금 사용 불가예요");return}
   if(!dateBookable(S.sel)){toast(S.sel<ymd()?"지난 날짜예요":`${md(lastBookable())}까지만 신청할 수 있어요`);return}
   {const mm=slotFrom(e,col),bk=blockAt({date:S.sel,start:mm,end:mm+30},Number(col.dataset.room));if(bk&&!isAdmin()){toast(`사용 금지 시간이에요 (${fmt(bk.start)}–${fmt(bk.end)}${bk.reason?" · "+bk.reason:""})`);return}}
-  if(isLeader()&&teamCount(S.sel,S.team)>=DAILY){toast(`${md(S.sel)}에는 이미 ${DAILY}회 신청했어요`);return}
+  let left=Infinity;
+  if(isLeader()){const u=unitOf(S.team);left=unitCap(u,S.sel)-unitUsed(u,S.sel);if(left<60){toast(`${md(S.sel)} ${unitName(S.team)} 하루 사용 시간(${hrs(unitCap(u,S.sel))}시간)을 다 썼어요`);return}}
   const m=slotFrom(e,col),room=Number(col.dataset.room);
-  const dur=roomTaken({date:S.sel,start:m,end:m+120},room).length?60:120;
+  const dur=roomTaken({date:S.sel,start:m,end:m+120},room).length||left<120?60:120;
   openForm({room,start:fmt(m),dur});
 });
 
@@ -794,7 +845,7 @@ function openAdmin(){
       <textarea id="aNotice" placeholder="예: 10/20(월) 오후에는 1–3번 방을 교수님 실습으로 사용합니다.">${esc(S.notice)}</textarea>
       <div class="adm-row"><button class="btn primary sm" type="button" id="aNoticeSave">공지 저장</button><span class="msg" id="aNoticeMsg"></span></div></div>
     <div class="sep"></div>
-    <div class="field"><span>고정 시간대 (지정한 조가 매주 같은 시간을 계속 사용 · 오픈 시간·하루 2회 제한 없음)</span>
+    <div class="field"><span>고정 시간대 (지정한 조가 매주 같은 시간을 계속 사용 · 오픈 시간·하루 상한 제한 없음, 사용 시간은 상한에 포함)</span>
       <div class="two">
         <input id="xTeam" placeholder="조 (예: 3A)" autocapitalize="characters" aria-label="조">
         <input id="xContent" placeholder="연습 내용 (선택)" aria-label="연습 내용">
@@ -811,6 +862,21 @@ function openAdmin(){
       <div class="adm-row"><button class="btn primary sm" type="button" id="xAdd">고정 시간대 추가</button><span class="msg" id="xMsg"></span></div>
       <div id="xRes"></div>
       <div class="blk-list" id="xList"></div>
+    </div>
+    <div class="sep"></div>
+    <div class="field"><span>하루 상한 · 동시 방 수 (같이 연습하는 조는 한 묶음으로 계산)</span>
+      <div class="u-row u-head"><span>묶음 (조)</span><span>인원</span><span>동시 방</span><span>상한(시간)</span><span></span></div>
+      <div id="uList" style="display:grid;gap:6px"></div>
+      <span class="hint">상한은 사용 금지(수업 등)로 막힌 방·시간 비율만큼 그날 자동으로 줄어요 (최소 절반). 관리자 신청은 상한과 상관없이 들어가요.</span>
+    </div>
+    <div class="field"><span>조 묶음 · 일차 바꾸기</span>
+      <div class="three"><input id="tTeam" placeholder="조 (예: 3B)" autocapitalize="characters" aria-label="조"><input id="tDay" type="number" min="1" max="20" placeholder="일차" aria-label="일차"><input id="tUnit" placeholder="묶음 (예: 3A)" autocapitalize="characters" aria-label="묶음"></div>
+      <div class="adm-row"><button class="btn sm primary" type="button" id="tSave">저장</button><span class="msg" id="tMsg"></span></div>
+      <span class="hint">묶음을 비우면 그 조 혼자 한 묶음이 돼요. 같은 묶음끼리는 사용 시간·동시 방 수를 함께 써요.</span>
+    </div>
+    <div class="field"><span>오픈 순서 (매일 21:00 기준, 몇 분 뒤에 다음 날이 열리는지)</span>
+      <div id="oList" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px"></div>
+      <div class="adm-row"><button class="btn sm primary" type="button" id="oSave">오픈 순서 저장</button><span class="msg" id="oMsg"></span></div>
     </div>
     <div class="sep"></div>
     <div class="field"><span>오스키실 사용 금지 (고른 방은 그 시간에 신청 불가)</span>
@@ -838,8 +904,31 @@ function openAdmin(){
         <div class="adm-row"><button class="btn sm" type="button" data-save>저장</button><span class="msg" data-msg></span></div>
       </div>`}).join("")}</div>
     <div class="sep"></div>
-    <p class="hint" style="margin:0">시간표에서 신청 칸을 누르면 어느 조 신청이든 취소할 수 있고, 빈칸을 누르면 조를 골라 대리 신청할 수 있어요. 관리자는 날짜 제한과 사용 금지 시간에 상관없이 신청할 수 있어요.</p>
+    <p class="hint" style="margin:0">시간표에서 신청 칸을 누르면 어느 조 신청이든 취소할 수 있고, 빈칸을 누르면 조를 골라 대리 신청할 수 있어요. 관리자는 날짜 제한·하루 상한·사용 금지 시간에 상관없이 신청할 수 있어요.</p>
     <button class="btn" type="button" id="logout">로그아웃</button>`;
+  const natural=(a,b)=>(parseInt(a)||99)-(parseInt(b)||99)||a.localeCompare(b);
+  const uList=()=>{const us=Object.keys(S.units||{}).sort(natural),rules=Object.values(S.rules||{});
+    $("uList").innerHTML=us.map(u=>{const x=S.units[u],ts=rules.filter(r=>(r.unit||r.team)===u).map(r=>r.team).sort(natural);
+      return `<div class="u-row" data-u="${esc(u)}"><span><b>${esc(u)}</b><br><span class="tm">${ts.length?ts.join("·")+"조":"조 없음"} · 오늘 ${hrs(unitUsed(u,ymd()))}/${hrs(unitCap(u,ymd()))}h</span></span>
+        <input type="number" min="0" max="30" data-f="people" value="${x.people??""}" placeholder="-" aria-label="${esc(u)} 인원">
+        <select data-f="max_rooms" aria-label="${esc(u)} 동시 방">${[1,2,3].map(n=>`<option ${n===(x.max_rooms||1)?"selected":""}>${n}</option>`).join("")}</select>
+        <input type="number" min="0" max="16" step="0.5" data-f="daily" value="${(x.daily_min??120)/60}" aria-label="${esc(u)} 하루 상한 시간">
+        <button class="btn sm" type="button" data-usave>저장</button></div>`}).join("")||`<span class="hint">묶음 정보가 아직 없어요.</span>`;
+    $("uList").querySelectorAll("[data-usave]").forEach(b=>b.onclick=async()=>{const row=b.closest(".u-row"),u=row.dataset.u,f=k=>row.querySelector(`[data-f="${k}"]`).value;
+      const daily=Math.round(Number(f("daily"))*2)*30;
+      if(!(daily>=0&&daily<=960)){toast("상한은 0–16시간 사이로 적어 주세요");return}
+      try{await api.setUnit(u,{people:f("people")===""?null:Number(f("people")),max_rooms:Number(f("max_rooms")),daily_min:daily});await api.loadMeta();render();uList();toast(`${u} 저장했어요 · 하루 ${hrs(daily)}시간`)}catch(e){toast(errText(e))}})};
+  const oList=()=>{const o=S.offsets||{},days=[...new Set([1,2,3,4,5,...Object.keys(o).map(Number).filter(d=>d>0)])].sort((a,b)=>a-b);
+    $("oList").innerHTML=days.map(d=>`<label class="field"><span>${d}일차</span><input type="number" min="0" max="180" step="5" data-od="${d}" value="${o[d]??o[0]??0}"></label>`).join("")
+      +`<label class="field"><span>나머지 일차</span><input type="number" min="0" max="180" step="5" data-od="0" value="${o[0]??0}"></label>`};
+  uList();oList();
+  $("tSave").onclick=async()=>{const m=$("tMsg"),team=$("tTeam").value.trim().replace(/[조팀]$/,"").toUpperCase(),day=$("tDay").value?Number($("tDay").value):null,unit=$("tUnit").value.trim().toUpperCase();
+    if(!team||!(S.teamList||[]).includes(team)){m.className="msg err";m.textContent="없는 조예요. 조 이름을 확인해 주세요.";return}
+    try{await api.setTeamRule(team,unit||team,day);await api.loadMeta();render();uList();m.className="msg good";m.textContent=`${team}조 → ${day?day+"일차 · ":""}${unit||team} 묶음`}catch(e){m.className="msg err";m.textContent=errText(e)}};
+  $("tTeam").addEventListener("change",()=>{const r=ruleOf($("tTeam").value.trim().replace(/[조팀]$/,"").toUpperCase());if(r){$("tDay").value=r.exam_day??"";$("tUnit").value=r.unit||""}});
+  $("oSave").onclick=async()=>{const m=$("oMsg"),o=S.offsets||{},ch=[...$("oList").querySelectorAll("[data-od]")].map(i=>[Number(i.dataset.od),Number(i.value)]).filter(([d,v])=>o[d]!==v);
+    if(ch.some(([,v])=>!(v>=0&&v<=180))){m.className="msg err";m.textContent="0–180분 사이로 적어 주세요.";return}
+    try{for(const [d,v] of ch)await api.setOffset(d,v);await api.loadMeta();render();oList();m.className="msg good";m.textContent=ch.length?`저장했어요 · ${openOrderText()}`:"바뀐 게 없어요"}catch(e){m.className="msg err";m.textContent=errText(e)}};
   const xTog=(id,multi)=>{$(id).onclick=e=>{const b=e.target.closest("button");if(!b)return;
     if(multi)b.setAttribute("aria-pressed",b.getAttribute("aria-pressed")!=="true");else $(id).querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b))}};
   xTog("xRoom",false);xTog("xDays",true);xTog("xKits",true);xTog("xMode",false);
@@ -932,6 +1021,7 @@ function openForm(pre={}){
   const date=pre.date||S.sel;
   if(!dateBookable(date)){toast(`${md(lastBookable())}까지만 신청할 수 있어요`);return}
   S.draft={team:isAdmin()?(store("osce-admin-team")||""):S.team,day:pre.day??store("osce-day")??"",date,room:pre.room||1,start:pre.start||"09:00",dur:DURS.includes(pre.dur)?pre.dur:120,content:pre.content||"",kits:new Set()};
+  if(isLeader()){const u=unitOf(S.team),left=unitCap(u,date)-unitUsed(u,date);if(left<S.draft.dur&&left>=60)S.draft.dur=60}
   if(isAdmin()){S.draft.rooms=new Set([S.draft.room]);S.draft.rep={on:false,to:addDays(date,6),daily:true,days:new Set([1,2,3,4,5])}}
   openDrawer(isAdmin()?"대리 신청 (관리자)":"연습 신청",{form:true});drawForm();
 }
@@ -953,9 +1043,12 @@ function drawForm(){
   const blockedRooms=new Set(isAdmin()?[]:ROOMS.filter(x=>blockAt(r,x)));
   const taken=new Set(ROOMS.filter(x=>roomTaken(r,x,ex).length||closedRooms.has(x)||blockedRooms.has(x)));
   const used=usedSets(r,ex),clash=roomTaken(r,d.room,ex),freeAlt=ROOMS.filter(x=>!taken.has(x));
-  const teamBusy=d.team&&S.bookings.find(b=>b.id!==ex&&b.date===r.date&&b.team===d.team&&overlap(b,r));
   const lock=editLocked(d);
-  const used2=isLeader()&&!lock&&!(ex&&d.orig.fixed)&&teamCount(r.date,S.team,ex)>=DAILY;
+  const moved=!ex||r.date!==d.orig.date||d.room!==d.orig.room||r.start!==d.orig.start||r.end!==d.orig.end;
+  const u=d.team?unitOf(d.team):"",uCap=u?unitCap(u,r.date):0,uUsed=u?unitUsed(u,r.date,ex):0,uMax=u?(unitInfo(u).max_rooms||1):1;
+  const uSame=u?unitBookings(u,r.date,ex).filter(b=>overlap(b,r)):[];
+  const lim=isLeader()&&!lock&&moved?limitCheck(S.team,r,d.room,ex):"";
+  const admOver=isAdmin()&&u&&(uUsed+r.end-r.start>uCap||uSame.length>=uMax);
   const blk=lock?null:blockAt(r,d.room),blocked=blk&&!isAdmin();
   const roomClosed=!lock&&closedRooms.has(d.room);
   /* 관리자 새 신청: 방 여러 개 선택 */
@@ -1000,15 +1093,18 @@ function drawForm(){
   ${!multi&&!roomClosed&&clash.length?`<div class="alert"><div><b>${d.room}번 방은 이 시간에 이미 신청이 있어요.</b><br>${clash.map(b=>`${esc(teamLabel(b))} ${fmt(b.start)}–${fmt(b.end)}`).join("<br>")}</div></div>`:""}
   ${!multi&&(roomClosed||clash.length||blocked)?(freeAlt.length?`<div class="hint">비어 있는 방: ${freeAlt.map(x=>`<button class="btn sm" type="button" data-room="${x}">${x}번</button>`).join(" ")}</div>`:`<div class="hint">이 시간엔 쓸 수 있는 방이 없어요. 시간을 바꿔 주세요.</div>`):""}
   ${blk&&!multi?`<div class="alert"><div><b>${fmt(blk.start)}–${fmt(blk.end)}은 ${d.room}번 방 사용 금지 시간이에요.</b>${blk.reason?" ("+esc(blk.reason)+")":""}${isAdmin()?" 관리자라서 신청은 가능해요.":" 다른 시간을 골라 주세요."}</div></div>`:""}
-  ${used2?`<div class="alert"><div><b>${md(r.date)}에는 이미 ${DAILY}회 신청했어요.</b> 한 조는 하루 ${DAILY}회까지만 신청할 수 있어요. 다른 날짜를 골라 주세요.</div></div>`:isLeader()?`<div class="hint">이 날 우리 조 신청 ${teamCount(r.date,S.team,ex)+(ex?1:0)}/${DAILY}회</div>`:""}
-  ${teamBusy?`<div class="alert"><div><b>${esc(d.team)}조는 이 시간에 이미 ${teamBusy.room}번 방을 신청했어요.</b> (${fmt(teamBusy.start)}–${fmt(teamBusy.end)})${isAdmin()?" 관리자라서 방 하나 더 신청할 수 있어요.":""}</div></div>`:""}
+  ${lim==="DAILY_CAP"?`<div class="alert"><div><b>${md(r.date)} ${esc(unitName(S.team))} 하루 상한 ${hrs(uCap)}시간 중 ${hrs(uUsed)}시간을 이미 썼어요.</b> ${uCap-uUsed>=60?`남은 ${hrs(uCap-uUsed)}시간 안으로 줄여 주세요.`:"다른 날짜를 골라 주세요."}</div></div>`
+    :lim==="TEAM_BUSY"?`<div class="alert"><div><b>이 시간에 ${esc(unitName(S.team))}가 이미 방 ${uSame.length}개를 쓰고 있어요.</b> 동시에 ${uMax}개 방까지예요.<br>${uSame.map(b=>`${esc(b.team)}조 ${b.room}번 방 ${fmt(b.start)}–${fmt(b.end)}`).join("<br>")}</div></div>`
+    :lim==="RUN_LIMIT"?`<div class="alert"><div><b>${d.room}번 방을 연달아 3시간 넘게 쓰게 돼요.</b> 같은 방은 연속 3시간까지예요. 시간을 띄우거나 다른 방을 골라 주세요.</div></div>`
+    :isLeader()&&!lock?`<div class="hint">이 날 ${esc(unitName(S.team))} 사용 ${hrs(uUsed+r.end-r.start)}/${hrs(uCap)}시간 (이번 신청 포함) · 동시 방 ${uMax}개 · 같은 방 연속 3시간까지</div>`:""}
+  ${admOver?`<div class="hint">${esc(unitName(d.team))}: 이 날 ${hrs(uUsed+r.end-r.start)}/${hrs(uCap)}시간${uSame.length?` · 같은 시간 방 ${uSame.length+1}개`:""} — 관리자라서 상한과 상관없이 신청돼요 (사용 시간은 상한에 포함).</div>`:""}
   <label class="field"><span>연습내용</span><input id="fContent" value="${esc(d.content)}" placeholder="A형 모의고사"></label>
   <div class="field"><span>쓸 재료</span>
     <div class="chips" id="fKits">${KITS.map(([k,n])=>{const left=SETS.filter(s=>!used.has(k+"-"+s)).length;if(!left)d.kits.delete(k);
       return `<button type="button" class="chip" data-k="${k}" aria-pressed="${d.kits.has(k)}" ${left?"":"disabled title='이 시간대 2세트 모두 예약됨'"}>${n}${left===1?"<small>1세트 남음</small>":""}</button>`}).join("")}</div>
     <span class="hint">남는 세트(1 또는 2)로 자동 배정돼요.${multi&&sel.length>1?` 방마다 한 세트씩, 세트가 모자라면 앞 방부터 배정돼요.`:""}</span></div>
   <div class="msg" id="fMsg"></div>
-  <button class="btn primary" type="button" id="fSubmit" ${(multi?(!sel.length||(badSel.length&&!(d.rep&&d.rep.on))):(clash.length||(teamBusy&&!isAdmin())||roomClosed||used2||blocked))?"disabled":""}>${lock?"재료·내용 저장":multi&&!sel.length?"방을 골라 주세요":multi&&d.rep&&d.rep.on?`${sel.join("·")}번 방 · ${fmt(r.start)}–${fmt(r.end)} · ${md(d.date)}~${md(d.rep.to)} 반복 신청`:`${multi?sel.join("·"):d.room}번 방 · ${fmt(r.start)}–${fmt(r.end)} ${ex?"으로 변경":multi&&sel.length>1?`신청 (${sel.length}건)`:"신청"}`}</button>
+  <button class="btn primary" type="button" id="fSubmit" ${(multi?(!sel.length||(badSel.length&&!(d.rep&&d.rep.on))):(clash.length||!!lim||roomClosed||blocked))?"disabled":""}>${lock?"재료·내용 저장":multi&&!sel.length?"방을 골라 주세요":multi&&d.rep&&d.rep.on?`${sel.join("·")}번 방 · ${fmt(r.start)}–${fmt(r.end)} · ${md(d.date)}~${md(d.rep.to)} 반복 신청`:`${multi?sel.join("·"):d.room}번 방 · ${fmt(r.start)}–${fmt(r.end)} ${ex?"으로 변경":multi&&sel.length>1?`신청 (${sel.length}건)`:"신청"}`}</button>
   ${ex?`<button class="btn ghost" type="button" id="fBack">변경 안 하고 돌아가기</button>`:""}`;
   bindForm();
 }
@@ -1051,7 +1147,7 @@ async function submit(){
   const lock=editLocked(d);
   if(!isAdmin()&&!lock&&blockAt(r,S.draft.room)){setMsg(errText(new Error("BLOCKED")),"err");return}
   const ex=d.editId;
-  if(isLeader()&&!lock&&!(ex&&d.orig.fixed)&&teamCount(r.date,S.team,ex)>=DAILY){setMsg(errText(new Error("DAILY_LIMIT")),"err");return}
+  if(isLeader()&&!lock&&(!ex||r.date!==d.orig.date||d.room!==d.orig.room||r.start!==d.orig.start||r.end!==d.orig.end)){const c=limitCheck(S.team,r,d.room,ex);if(c){setMsg(errText(new Error(c)),"err");return}}
   if(!lock&&!dateBookable(r.date)){setMsg(errText(new Error(r.date<ymd()?"PAST":"TOO_FAR")),"err");return}
   if(!isAdmin()&&!lock&&r.date===ymd()&&r.end<=nowMin()){setMsg("이미 지난 시간은 신청할 수 없어요.","err");return}
   if(r.start<OPEN||r.end>CLOSE){setMsg("07:00–23:00 사이로만 신청할 수 있어요.","err");return}
