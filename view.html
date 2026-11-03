@@ -16,6 +16,7 @@
 <style>
 /* Layout: 보기 전용 현황판. 상단(탭·시계) → 4주 날짜 띠 → 방 6칸(같은 크기) → 방별 가로 타임라인 → 재료 20세트. 모바일은 방 3×2, 타임라인·재료를 압축해 한 화면 위주로 */
 :root{
+  --hours:16;
   color-scheme:light;
   --bg:#f5f8fa; --surface:#ffffff; --sunk:#f0f4f7; --line:#e6ecf0; --line-strong:#d2dbe1;
   --fg:#16212a; --muted:#64737f; --faint:#a3b0ba;
@@ -137,7 +138,7 @@ h2 small{font-weight:500;color:var(--muted);font-size:.8rem}
 .tl .hd{height:24px;position:relative}
 .tl .hd span{position:absolute;top:6px;transform:translateX(-50%);font-family:var(--t-mono);font-size:.68rem;color:var(--faint)}
 .tl .rl{display:flex;align-items:center;justify-content:flex-end;padding-right:10px;font-weight:700;font-size:.84rem;height:var(--track-h)}
-.track{position:relative;height:var(--track-h);border-top:1px solid var(--line);background-image:repeating-linear-gradient(to right,var(--line) 0 1px,transparent 1px calc(100% / 14))}
+.track{position:relative;height:var(--track-h);border-top:1px solid var(--line);background-image:repeating-linear-gradient(to right,var(--line) 0 1px,transparent 1px calc(100% / var(--hours,16)))}
 .track.last{border-bottom:1px solid var(--line)}
 .blk{position:absolute;top:4px;bottom:4px;border-radius:7px;background:var(--pb);color:var(--pi);padding:2px 7px;font-size:.74rem;line-height:1.2;overflow:hidden;white-space:nowrap;display:grid;align-content:center}
 .blk b{font-weight:700;overflow:hidden;text-overflow:ellipsis}
@@ -291,7 +292,7 @@ html,body{overflow-x:clip;max-width:100%}
 const ROOMS=[1,2,3,4,5,6];
 const KITS=[["anes","마취 세트"],["ext","발치"],["sut","봉합"],["tbi","TBI"],["fl","불소도포"],["seal","실란트"],["rd","러버댐"],["srp","SRP"],["ept","EPT"],["probe","치주낭 측정"]];
 const SETS=[1,2];
-const OPEN=8*60,CLOSE=22*60;
+const OPEN=7*60,CLOSE=23*60;   /* 운영 07:00–23:00 */
 const SPAN_DAYS=28;
 const PAST_DAYS=5;   /* 날짜 띠에서 볼 수 있는 지난 날짜 수 */
 const WD=["일","월","화","수","목","금","토"];
@@ -487,7 +488,7 @@ function renderTimeline(){
   $("tlTitle").textContent=today?"오늘 시간표":"시간표";
   $("tlSub").textContent=today?(list.length?list.length+"건":""):dayTitle();
   const x=m=>((m-OPEN)/span*100).toFixed(3)+"%";
-  let h=`<div class="tl"><div></div><div class="hd">${Array.from({length:15},(_,i)=>`<span class="${i%2?"odd":""}" style="left:${(i/14*100).toFixed(3)}%">${pad(8+i)}</span>`).join("")}</div>`;
+  let h=`<div class="tl"><div></div><div class="hd">${Array.from({length:(CLOSE-OPEN)/60+1},(_,i)=>`<span class="${i%2?"odd":""}" style="left:${(i/((CLOSE-OPEN)/60)*100).toFixed(3)}%">${pad(OPEN/60+i)}</span>`).join("")}</div>`;
   ROOMS.forEach((r,ri)=>{
     h+=`<div class="rl">${r}<span class="hide-m">번</span></div><div class="track ${ri===ROOMS.length-1?"last":""}">`;
     for(const b of list.filter(b=>b.room===r)){

@@ -335,7 +335,7 @@ const KITNAME=Object.fromEntries(KITS);
 const KITSHORT={anes:"마취",ext:"발치",sut:"봉합",tbi:"TBI",fl:"불소",seal:"실란트",rd:"러버댐",srp:"SRP",ept:"EPT",probe:"치주낭"};
 const SETS=[1,2];
 const DURS=[60,120];
-const OPEN=8*60, CLOSE=22*60;
+const OPEN=7*60, CLOSE=23*60;   /* 운영 07:00–23:00 */
 const ROLLOVER=21;   /* 매일 21:00에 다음 날 오픈 (그 전엔 오늘까지만) */
 const DAILY=2;       /* 조당 하루 2회까지 */
 const MAXLEN=180;    /* 연장 포함 한 번 사용 최대 3시간 */
@@ -391,7 +391,7 @@ function errText(e){
   if(m.includes("NOT_LEADER")||m.includes("NOT_ADMIN"))return "코드가 맞지 않아요. 다시 로그인해 주세요.";
   if(m.includes("NOT_IN_USE"))return "지금 사용 중인 신청만 조정할 수 있어요.";
   if(m.includes("TOO_SHORT"))return "더 줄일 수 없어요. 이미 지난 시간이거나 시작 시간보다 빨라져요.";
-  if(m.includes("CLOSE_TIME"))return "22:00 이후로는 연장할 수 없어요.";
+  if(m.includes("CLOSE_TIME"))return "23:00 이후로는 연장할 수 없어요.";
   if(m.includes("TOO_LONG"))return "한 번 사용은 연장 포함 최대 3시간이에요.";
   if(m.includes("NOT_YOURS"))return "우리 조 신청만 조정할 수 있어요.";
   if(m.includes("ENDED"))return "이미 끝난 신청은 바꿀 수 없어요.";
@@ -403,7 +403,7 @@ function errText(e){
   if(m.includes("BAD_PERIOD"))return "기간을 확인해 주세요. 끝 날짜가 시작보다 뒤여야 하고, 최대 6개월이에요.";
   if(m.includes("NO_DAYS"))return "요일을 하나 이상 골라 주세요.";
   if(m.includes("NO_ROOMS"))return "사용 금지할 방을 하나 이상 골라 주세요.";
-  if(m.includes("BAD_RANGE"))return "시작이 끝보다 빨라야 하고, 08:00–22:00 안이어야 해요.";
+  if(m.includes("BAD_RANGE"))return "시작이 끝보다 빨라야 하고, 07:00–23:00 안이어야 해요.";
   if(m.includes("DAILY_LIMIT"))return "한 조는 하루 2회까지만 신청할 수 있어요.";
   if(m.includes("TEAM_BUSY"))return "이 조는 이 시간에 이미 다른 방을 신청했어요.";
   if(m.includes("KIT_TAKEN"))return "방금 다른 조가 같은 재료 세트를 잡았어요. 재료를 다시 골라 주세요.";
@@ -575,7 +575,7 @@ function adjCheck(b,delta,code){
     return "";
   }
   const add={date:b.date,start:b.end,end:ne};
-  if(ne>CLOSE)return R("CLOSE_TIME","22시 마감");
+  if(ne>CLOSE)return R("CLOSE_TIME","23시 마감");
   if(!adm&&ne-b.start>MAXLEN)return R("TOO_LONG","최대 3시간");
   if(S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&o.room===b.room&&overlap(o,add)))return R("23P01","다음 신청 있음");
   if(!adm&&S.bookings.some(o=>o.id!==b.id&&o.date===b.date&&o.team===b.team&&overlap(o,add)))return R("TEAM_BUSY","조 일정 겹침");
@@ -1017,7 +1017,7 @@ function bindForm(){
   ["fDate","fStart"].forEach(id=>$(id).addEventListener("change",()=>{readForm();drawForm()}));
   if($("fEnd"))$("fEnd").addEventListener("change",()=>{readForm();const e=toMin($("fEnd").value||"00:00"),st=toMin(S.draft.start);
     if(!$("fEnd").value||e-st<30||(e-st)%30){drawForm();setMsg("끝나는 시간은 시작보다 30분 이상 뒤, 30분 단위로 골라 주세요.","err");return}
-    if(e>CLOSE){drawForm();setMsg("22:00까지만 쓸 수 있어요.","err");return}
+    if(e>CLOSE){drawForm();setMsg("23:00까지만 쓸 수 있어요.","err");return}
     S.draft.dur=e-st;drawForm()});
   if(isAdmin())$("fTeam").addEventListener("change",()=>{readForm();drawForm()});
   $("drawerBody").querySelectorAll("[data-room]").forEach(b=>b.onclick=()=>{readForm();const n=Number(b.dataset.room),d=S.draft;
@@ -1054,7 +1054,7 @@ async function submit(){
   if(isLeader()&&!lock&&!(ex&&d.orig.fixed)&&teamCount(r.date,S.team,ex)>=DAILY){setMsg(errText(new Error("DAILY_LIMIT")),"err");return}
   if(!lock&&!dateBookable(r.date)){setMsg(errText(new Error(r.date<ymd()?"PAST":"TOO_FAR")),"err");return}
   if(!isAdmin()&&!lock&&r.date===ymd()&&r.end<=nowMin()){setMsg("이미 지난 시간은 신청할 수 없어요.","err");return}
-  if(r.start<OPEN||r.end>CLOSE){setMsg("08:00–22:00 사이로만 신청할 수 있어요.","err");return}
+  if(r.start<OPEN||r.end>CLOSE){setMsg("07:00–23:00 사이로만 신청할 수 있어요.","err");return}
   if(roomTaken(r,d.room,ex).length||(!roomInfo(d.room).open&&!(ex&&d.room===d.orig.room))){drawForm();return}
   const used=usedSets(r,ex),kits=[];
   for(const k of d.kits){const keep=ex&&(d.orig.kits||[]).find(x=>x.split("-")[0]===k&&!used.has(x));if(keep){kits.push(keep);continue}
@@ -1076,7 +1076,7 @@ async function submitRepeat(){
   if(!d.team){setMsg("어느 조로 신청할지 적어 주세요.","err");$("fTeam").focus();return}
   if(!rooms.length){setMsg("방을 하나 이상 골라 주세요.","err");return}
   if(!dates.length){setMsg("반복할 날짜가 없어요. 끝 날짜와 요일을 확인해 주세요.","err");return}
-  if(r.start<OPEN||r.end>CLOSE){setMsg("08:00–22:00 사이로만 신청할 수 있어요.","err");return}
+  if(r.start<OPEN||r.end>CLOSE){setMsg("07:00–23:00 사이로만 신청할 수 있어요.","err");return}
   S.busy=true;$("fSubmit").disabled=true;
   const ok=[],skip=[],short=[];let i=0;
   for(const date of dates){
@@ -1105,7 +1105,7 @@ async function submitMulti(){
   if(d.rep&&d.rep.on)return submitRepeat();
   if(!d.team){setMsg("어느 조로 신청할지 적어 주세요.","err");$("fTeam").focus();return}
   if(!rooms.length){setMsg("방을 하나 이상 골라 주세요.","err");return}
-  if(r.start<OPEN||r.end>CLOSE){setMsg("08:00–22:00 사이로만 신청할 수 있어요.","err");return}
+  if(r.start<OPEN||r.end>CLOSE){setMsg("07:00–23:00 사이로만 신청할 수 있어요.","err");return}
   if(rooms.some(x=>roomTaken(r,x).length||!roomInfo(x).open)){drawForm();return}
   S.busy=true;$("fSubmit").disabled=true;
   const used=usedSets(r),ok=[],fail=[],short=[];
