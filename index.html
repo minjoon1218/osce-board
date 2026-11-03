@@ -428,10 +428,11 @@ const isWalk=d=>d.date===ymd()&&d.start<=nowMin()+WALK();
 const fmtH=m=>{m=Math.round(m);const h=Math.floor(m/60),r=m%60;return h&&r?`${h}시간 ${r}분`:h?`${h}시간`:`${r}분`};
 const mealText=()=>meals().map(w=>`${fmt(w.start_min)}–${fmt(w.end_min)}`).join(", ");
 const mealRate=()=>{const f=Number((meals()[0]||{factor:1}).factor);return f===0?"안 들어가고":f===0.5?"절반만 들어가고":`${Math.round(f*100)}%만 들어가고`};
-const unitUsed=(u,date,ex)=>unitBookings(u,date,ex).filter(b=>!b.walkin).reduce((a,b)=>a+chargeMin(b.start,b.end),0);
+const unitUsed=(u,date,ex)=>unitBookings(u,date,ex).filter(b=>!b.walkin&&!b.bonus&&!b.fixed).reduce((a,b)=>a+chargeMin(b.start,b.end),0);
 function unitRun(u,d,room,ex){const l=unitBookings(u,d.date,ex).filter(b=>b.room===room);let s=d.start,e=d.end,f;
   while((f=l.find(b=>b.end===s)))s=f.start;while((f=l.find(b=>b.start===e)))e=f.end;return e-s}
 function limitCheck(team,d,room,ex,walk){const u=unitOf(team);
+  if(!walk&&ex){const o=S.bookings.find(x=>x.id===ex);if(o&&(o.bonus||o.fixed))walk=true}   /* 관리자 추가·고정 신청은 상한 밖 */
   if(!walk&&unitUsed(u,d.date,ex)+chargeMin(d.start,d.end)>unitCap(u,d.date)+1e-9)return "DAILY_CAP";
   if(unitBookings(u,d.date,ex).filter(b=>overlap(b,d)).length>=(unitInfo(u).max_rooms||1))return "TEAM_BUSY";
   if(unitRun(u,d,room,ex)>MAXLEN)return "RUN_LIMIT";
@@ -482,7 +483,7 @@ let syncT;function syncSoon(){clearTimeout(syncT);syncT=setTimeout(async()=>{try
 const cfg=window.OSCE_CONFIG||{};
 const LIVE=!!(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY&&window.supabase);
 let api;
-const rowToBooking=r=>({id:r.id,date:r.date,room:r.room,start:r.start_min,end:r.end_min,day:r.day_label||"",team:r.team,content:r.content||"",kits:r.kits||[],fixed:r.fixed_id||null,walkin:!!r.walkin});
+const rowToBooking=r=>({id:r.id,date:r.date,room:r.room,start:r.start_min,end:r.end_min,day:r.day_label||"",team:r.team,content:r.content||"",kits:r.kits||[],fixed:r.fixed_id||null,walkin:!!r.walkin,bonus:!!r.bonus});
 
 if(LIVE){
   const sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
@@ -592,7 +593,7 @@ if(LIVE){
       if(db.bookings.some(x=>x.date===b.date&&x.room===b.room&&overlap(x,b)))throw new Error("23P01");
       const walkin=w.role!=="admin"&&isWalk(b);
       if(w.role!=="admin"){const c=limitCheck(team,b,b.room,null,walkin);if(c)throw new Error(c)}
-      const r={...b,team,walkin,id:"d"+Date.now()+"-"+Math.random().toString(36).slice(2,6)};db.bookings.push(r);save();S.bookings=db.bookings.slice();return r;
+      const r={...b,team,walkin,bonus:w.role==="admin",id:"d"+Date.now()+"-"+Math.random().toString(36).slice(2,6)};db.bookings.push(r);save();S.bookings=db.bookings.slice();return r;
     },
     async update(id,nb){const b=db.bookings.find(x=>x.id===id);if(!b)throw new Error("NOT_FOUND");const w=who(S.code);if(!w)throw new Error("NOT_LEADER");
       const team=w.role==="admin"?String(nb.team||b.team).toUpperCase():w.team;if(w.role!=="admin"&&b.team!==w.team)throw new Error("NOT_YOURS");
@@ -752,7 +753,7 @@ function renderGrid(){
       const top=(b.start-OPEN)/60*hp,ht=(b.end-b.start)/60*hp-3;
       const mine=isLeader()&&b.team===S.team,past=S.sel<t||(S.sel===t&&b.end<=nm);
       h+=`<button type="button" class="bk ${mine?"mine":""} ${past?"past":""}" data-id="${b.id}" style="top:${top+1}px;height:${ht}px;${palette(b.team)}">
-        <b>${esc(teamLabel(b))}${b.fixed?`<span class="fx">고정</span>`:""}</b><span class="t">${fmt(b.start)}–${fmt(b.end)}</span>
+        <b>${esc(teamLabel(b))}${b.fixed?`<span class="fx">고정</span>`:b.bonus?`<span class="fx">추가</span>`:""}</b><span class="t">${fmt(b.start)}–${fmt(b.end)}</span>
         ${ht>58&&(b.kits||[]).length?`<span class="x">${b.kits.map(kitShort).join(" · ")}</span>`:ht>58?`<span class="x">${esc(b.content)}</span>`:""}</button>`;
     }
     if(S.sel===t&&nm>=OPEN&&nm<=CLOSE)h+=`<div class="now" ${r===1?`data-t="${fmt(nm)}"`:""} style="top:${(nm-OPEN)/60*hp}px"></div>`;
@@ -882,7 +883,7 @@ function openAdmin(){
       <textarea id="aNotice" placeholder="예: 10/20(월) 오후에는 1–3번 방을 교수님 실습으로 사용합니다.">${esc(S.notice)}</textarea>
       <div class="adm-row"><button class="btn primary sm" type="button" id="aNoticeSave">공지 저장</button><span class="msg" id="aNoticeMsg"></span></div></div>
     <div class="sep"></div>
-    <div class="field"><span>고정 시간대 (지정한 조가 매주 같은 시간을 계속 사용 · 오픈 시간·하루 상한 제한 없음, 사용 시간은 상한에 포함)</span>
+    <div class="field"><span>고정 시간대 (지정한 조가 매주 같은 시간을 계속 사용 · 오픈 시간·하루 상한 제한 없음, 상한에도 안 들어감)</span>
       <div class="two">
         <input id="xTeam" placeholder="조 (예: 3A)" autocapitalize="characters" aria-label="조">
         <input id="xContent" placeholder="연습 내용 (선택)" aria-label="연습 내용">
@@ -904,7 +905,7 @@ function openAdmin(){
     <div class="field"><span>조당 하루 상한 (일차 구간별 · 같이 연습하는 조는 합산)</span>
       <div id="tierList" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px"></div>
       <div class="adm-row"><button class="btn sm primary" type="button" id="tierSave">상한 저장</button><span class="msg" id="tierMsg"></span></div>
-      <span class="hint">수업 등으로 사용 금지가 걸린 날은 막힌 만큼 자동으로 줄어요 (최소 절반). 관리자 신청은 상한과 상관없이 들어가요.</span>
+      <span class="hint">수업 등으로 사용 금지가 걸린 날은 막힌 만큼 자동으로 줄어요 (최소 절반). 관리자 신청·고정 시간대는 보너스라 조 상한에 안 들어가요.</span>
     </div>
     <div class="field"><span>동시에 쓸 수 있는 방 수 (묶음별)</span>
       <div id="uList" style="display:grid;gap:6px"></div>
@@ -1097,7 +1098,7 @@ function drawForm(){
   const uSame=u?unitBookings(u,r.date,ex).filter(b=>overlap(b,r)):[];
   const walk=isLeader()&&isWalk(r),charge=walk?0:chargeMin(r.start,r.end),disc=!walk&&charge<r.end-r.start;
   const lim=isLeader()&&!lock&&moved?limitCheck(S.team,r,d.room,ex,walk):"";
-  const admOver=isAdmin()&&u&&(uUsed+chargeMin(r.start,r.end)>uCap||uSame.length>=uMax);
+  const admOver=isAdmin()&&!ex&&!!u;
   const blk=lock?null:blockAt(r,d.room),blocked=blk&&!isAdmin();
   const roomClosed=!lock&&closedRooms.has(d.room);
   /* 관리자 새 신청: 방 여러 개 선택 */
@@ -1146,7 +1147,7 @@ function drawForm(){
     :lim==="TEAM_BUSY"?`<div class="alert"><div><b>이 시간에 ${esc(unitName(S.team))}가 이미 방 ${uSame.length}개를 쓰고 있어요.</b> 동시에 ${uMax}개 방까지예요.<br>${uSame.map(b=>`${esc(b.team)}조 ${b.room}번 방 ${fmt(b.start)}–${fmt(b.end)}`).join("<br>")}</div></div>`
     :lim==="RUN_LIMIT"?`<div class="alert"><div><b>${d.room}번 방을 연달아 3시간 넘게 쓰게 돼요.</b> 같은 방은 연속 3시간까지예요. 시간을 띄우거나 다른 방을 골라 주세요.</div></div>`
     :isLeader()&&!lock?`${walk?`<div class="hint ok">당일 빈자리예요 · 이번 신청은 하루 상한에 안 들어가요</div>`:disc?`<div class="hint ok">식사 시간 할인 · 이번 신청은 ${fmtH(charge)}만 차감돼요</div>`:""}<div class="hint">이 날 ${esc(unitName(S.team))} 사용 ${fmtH(uUsed+charge)} / ${fmtH(uCap)} (이번 신청 포함) · 동시 방 ${uMax}개 · 같은 방 연속 3시간까지</div>`:""}
-  ${admOver?`<div class="hint">${esc(unitName(d.team))}: 이 날 ${fmtH(uUsed+chargeMin(r.start,r.end))} / ${fmtH(uCap)}${uSame.length?` · 같은 시간 방 ${uSame.length+1}개`:""} — 관리자라서 상한과 상관없이 신청돼요 (사용 시간은 상한에 포함).</div>`:""}
+  ${admOver?`<div class="hint ok">관리자 추가 신청은 보너스라 ${esc(unitName(d.team))} 하루 상한에 안 들어가요 (이 날 조장 신청 ${fmtH(uUsed)} / ${fmtH(uCap)}).</div>`:""}
   <label class="field"><span>연습내용</span><input id="fContent" value="${esc(d.content)}" placeholder="A형 모의고사"></label>
   <div class="field"><span>쓸 재료</span>
     <div class="chips" id="fKits">${KITS.map(([k,n])=>{const left=SETS.filter(s=>!used.has(k+"-"+s)).length;if(!left)d.kits.delete(k);
