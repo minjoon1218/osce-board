@@ -968,7 +968,7 @@ function openAdmin(){
   const uList=()=>{const us=Object.keys(S.units||{}).sort(natural),rules=Object.values(S.rules||{});
     $("uList").innerHTML=us.filter(u=>rules.some(r=>(r.unit||r.team)===u)).map(u=>{const x=S.units[u],ts=rules.filter(r=>(r.unit||r.team)===u).map(r=>r.team).sort(natural);
       return `<div class="u-row" data-u="${esc(u)}"><span><b>${esc(u)}</b> <span class="tm">${ts.join("·")}조 · 하루 ${fmtH(unitCap(u,ymd()))} · 오늘 ${fmtH(unitUsed(u,ymd()))} 사용</span></span>
-        <select data-f="max_rooms" aria-label="${esc(u)} 동시 방">${[1,2,3].map(n=>`<option value="${n}" ${n===(x.max_rooms||1)?"selected":""}>${n}개</option>`).join("")}</select>
+        <select data-f="max_rooms" aria-label="${esc(u)} 동시 방">${[1,2,3,6].map(n=>`<option value="${n}" ${n===(x.max_rooms||1)?"selected":""}>${n===6?"제한 없음":n+"개"}</option>`).join("")}</select>
         <button class="btn sm" type="button" data-usave>저장</button></div>`}).join("")||`<span class="hint">묶음 정보가 아직 없어요.</span>`;
     $("uList").querySelectorAll("[data-usave]").forEach(b=>b.onclick=async()=>{const row=b.closest(".u-row"),u=row.dataset.u,x=S.units[u]||{};
       try{await api.setUnit(u,{people:x.people??null,max_rooms:Number(row.querySelector('[data-f="max_rooms"]').value),daily_min:x.daily_min??120});await api.loadMeta();render();uList();toast(`${u} 저장했어요`)}catch(e){toast(errText(e))}})};
