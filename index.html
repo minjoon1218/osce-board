@@ -419,8 +419,9 @@ function tierMin(day){const x=tierOf(day);return x?x.team_min:120}
 /* 신청 막힌 구간(day_tiers.closed)의 조 — 조장 신청 불가, 관리자는 가능 */
 const teamClosed=t=>{const r=ruleOf(t),x=tierOf(r?r.exam_day:null);return !!(x&&x.closed)};
 const closedLabel=()=>tiers().filter(x=>x.closed).map(x=>x.from_day===0?"나머지 조":x.label).join("·");
-function tierText(){const t=tiers().slice().sort((a,b)=>(a.from_day||99)-(b.from_day||99));return t.map(x=>`${x.label} ${fmtH(x.team_min)}`).join(" · ")}
+function tierText(){const t=tiers().slice().sort((a,b)=>(a.from_day||99)-(b.from_day||99));return t.map(x=>`${x.label} ${x.team_min>=960?"제한 없음":fmtH(x.team_min)}`).join(" · ")}
 function unitCap(u,date){const rs=Object.values(S.rules||{}).filter(r=>(r.unit||r.team)===u);
+  if(tiers().length&&rs.some(r=>tierMin(r.exam_day)>=960))return 99999;   /* 16시간 = 제한 없음 */
   const base=tiers().length&&rs.length?rs.reduce((a,r)=>a+tierMin(r.exam_day),0):(unitInfo(u).daily_min??120);
   const b=S.blocks.filter(k=>k.date===date).reduce((a,k)=>a+(Math.min(k.end,CLOSE)-Math.max(k.start,OPEN))*(k.rooms||ROOMS).length,0);
   return Math.floor(base*Math.max(0.5,1-b/(ROOMS.length*(CLOSE-OPEN)))/30)*30}
@@ -430,6 +431,7 @@ const meals=()=>S.meals||[];
 const chargeMin=(st,en)=>(en-st)-meals().reduce((a,w)=>a+Math.max(0,Math.min(en,w.end_min)-Math.max(st,w.start_min))*(1-Number(w.factor)),0);
 const WALK=()=>(S.cfg&&S.cfg.walkin_min!=null)?S.cfg.walkin_min:120;
 const isWalk=d=>d.date===ymd()&&d.start<=nowMin()+WALK();
+const fmtCap=m=>m>=99999?"제한 없음":fmtH(m);
 const fmtH=m=>{m=Math.round(m);const h=Math.floor(m/60),r=m%60;return h&&r?`${h}시간 ${r}분`:h?`${h}시간`:`${r}분`};
 const mealText=()=>meals().map(w=>`${fmt(w.start_min)}–${fmt(w.end_min)}`).join(", ");
 const mealRate=()=>{const f=Number((meals()[0]||{factor:1}).factor);return f===0?"안 들어가고":f===0.5?"절반만 들어가고":`${Math.round(f*100)}%만 들어가고`};
@@ -967,12 +969,12 @@ function openAdmin(){
   const natural=(a,b)=>(parseInt(a)||99)-(parseInt(b)||99)||a.localeCompare(b);
   const uList=()=>{const us=Object.keys(S.units||{}).sort(natural),rules=Object.values(S.rules||{});
     $("uList").innerHTML=us.filter(u=>rules.some(r=>(r.unit||r.team)===u)).map(u=>{const x=S.units[u],ts=rules.filter(r=>(r.unit||r.team)===u).map(r=>r.team).sort(natural);
-      return `<div class="u-row" data-u="${esc(u)}"><span><b>${esc(u)}</b> <span class="tm">${ts.join("·")}조 · 하루 ${fmtH(unitCap(u,ymd()))} · 오늘 ${fmtH(unitUsed(u,ymd()))} 사용</span></span>
+      return `<div class="u-row" data-u="${esc(u)}"><span><b>${esc(u)}</b> <span class="tm">${ts.join("·")}조 · 하루 ${fmtCap(unitCap(u,ymd()))} · 오늘 ${fmtH(unitUsed(u,ymd()))} 사용</span></span>
         <select data-f="max_rooms" aria-label="${esc(u)} 동시 방">${[1,2,3,6].map(n=>`<option value="${n}" ${n===(x.max_rooms||1)?"selected":""}>${n===6?"제한 없음":n+"개"}</option>`).join("")}</select>
         <button class="btn sm" type="button" data-usave>저장</button></div>`}).join("")||`<span class="hint">묶음 정보가 아직 없어요.</span>`;
     $("uList").querySelectorAll("[data-usave]").forEach(b=>b.onclick=async()=>{const row=b.closest(".u-row"),u=row.dataset.u,x=S.units[u]||{};
       try{await api.setUnit(u,{people:x.people??null,max_rooms:Number(row.querySelector('[data-f="max_rooms"]').value),daily_min:x.daily_min??120});await api.loadMeta();render();uList();toast(`${u} 저장했어요`)}catch(e){toast(errText(e))}})};
-  const tierFill=()=>{$("tierList").innerHTML=tiers().slice().sort((a,b)=>(a.from_day||99)-(b.from_day||99)).map(t=>`<div class="field"><span>${esc(t.label)} (시간)</span><input type="number" min="0" max="16" step="0.5" data-tier="${t.id}" value="${t.team_min/60}" ${t.closed?"disabled":""}>
+  const tierFill=()=>{$("tierList").innerHTML=tiers().slice().sort((a,b)=>(a.from_day||99)-(b.from_day||99)).map(t=>`<div class="field"><span>${esc(t.label)} (시간 · 16=제한 없음)</span><input type="number" min="0" max="16" step="0.5" data-tier="${t.id}" value="${t.team_min/60}" ${t.closed?"disabled":""}>
       <label class="chk"><input type="checkbox" data-tclosed="${t.id}" ${t.closed?"checked":""}> 신청 막기</label></div>`).join("")};
   const oList=()=>{const o=S.offsets||{},days=[...new Set([1,2,3,4,5,...Object.keys(o).map(Number).filter(d=>d>0)])].sort((a,b)=>a-b);
     $("oList").innerHTML=days.map(d=>`<label class="field"><span>${d}일차</span><input type="number" min="-1260" max="180" step="5" data-od="${d}" value="${o[d]??o[0]??0}"></label>`).join("")
@@ -1164,7 +1166,7 @@ function drawForm(){
     :lim==="GAP_SHORT"?`<div class="alert"><div><b>${d.room}번 방 우리 조 신청과 틈이 2시간보다 짧아요.</b> 같은 방은 딱 붙이거나(합쳐서 3시간까지) 2시간 이상 띄워 주세요. 다른 방은 바로 써도 돼요.</div></div>`
     :lim==="RUN_LIMIT"?`<div class="alert"><div><b>${d.room}번 방을 연달아 3시간 넘게 쓰게 돼요.</b> 같은 방은 연속 3시간까지예요. 시간을 띄우거나 다른 방을 골라 주세요.</div></div>`
     :isLeader()&&!lock?`<div class="hint">같은 방은 연달아 3시간까지, 다시 쓰려면 2시간 이상 띄워 주세요.</div>`:""}
-  ${admOver?`<div class="hint ok">관리자 추가 신청은 보너스라 ${esc(unitName(d.team))} 하루 상한에 안 들어가요 (이 날 조장 신청 ${fmtH(uUsed)} / ${fmtH(uCap)}).</div>`:""}
+  ${admOver?`<div class="hint ok">관리자 추가 신청은 보너스라 ${esc(unitName(d.team))} 하루 상한에 안 들어가요 (이 날 조장 신청 ${fmtH(uUsed)} / ${fmtCap(uCap)}).</div>`:""}
   <label class="field"><span>연습내용</span><input id="fContent" value="${esc(d.content)}" placeholder="A형 모의고사"></label>
   <div class="field"><span>쓸 재료</span>
     <div class="chips" id="fKits">${KITS.map(([k,n])=>{const left=SETS.filter(s=>!used.has(k+"-"+s)).length;if(!left)d.kits.delete(k);
