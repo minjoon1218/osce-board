@@ -277,6 +277,11 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
 .sess .fbt{grid-column:auto}
 .me{display:inline-flex;align-items:center;gap:5px;font-size:.84rem;color:var(--muted)}
 .me select{width:auto;padding:4px 8px;min-height:32px}
+.mepick{position:fixed;inset:0;z-index:60;background:rgba(15,20,25,.45);display:grid;place-items:center;padding:16px}
+.mepick-b{background:var(--surface);border-radius:16px;padding:20px;max-width:420px;width:100%;display:grid;gap:12px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.mepick-b h2{margin:0;font-size:1.2rem}
+.mepick-b p{margin:0;font-size:.86rem;color:var(--muted)}
+.mepick-b [data-melater]{justify-self:end}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.86rem;font-weight:500;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 @media (max-width:440px){.brand h1{display:none}}
@@ -584,7 +589,19 @@ const fbKey=q=>q.log?"l:"+q.log:`a:${q.day}:${q.slot}:${q.member}:${q.problem}`;
 const fbOf=q=>(S.D.fbs||[]).filter(f=>q.log?f.log_id===q.log:(f.day_id===q.day&&f.slot===q.slot&&f.member_id===q.member&&f.problem_id===q.problem));
 const fbWhen=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`};
 const meKey=()=>"osce-prac-me-"+(S.D&&S.D.unit||"");
-const meId=()=>{const v=store(meKey());return v&&mem(v)?v:""};
+/* 내 이름: localStorage + 쿠키(1년)에 같이 저장 — 카톡 인앱 브라우저 등에서 하나가 지워져도 기억 */
+const ckGet=k=>{try{const m=document.cookie.match(new RegExp("(?:^|; )"+k.replace(/[-.]/g,"\\$&")+"=([^;]*)"));return m?decodeURIComponent(m[1]):""}catch(e){return ""}};
+const ckSet=(k,v)=>{try{document.cookie=`${k}=${v?encodeURIComponent(v):""}; path=/; max-age=${v?31536000:0}; SameSite=Lax`}catch(e){}};
+const setMe=v=>{store(meKey(),v||null);ckSet(meKey(),v||"")};
+const meId=()=>{let v=store(meKey());if(!(v&&mem(v))){const c=ckGet(meKey());if(c&&mem(c)){v=c;store(meKey(),c)}}return v&&mem(v)?v:""};
+function askMe(){if(meId()||!S.D||S.meAsked||!activeMembers().length)return;S.meAsked=true;
+  const o=document.createElement("div");o.className="mepick";o.setAttribute("role","dialog");o.setAttribute("aria-modal","true");o.setAttribute("aria-label","내 이름 고르기");
+  o.innerHTML=`<div class="mepick-b"><h2>누구세요?</h2><p>한 번 고르면 이 기기에서 계속 기억해요. 피드백에 이 이름이 붙어요.</p>
+    <div class="chips">${activeMembers().map(m=>`<button type="button" class="chip mchip" data-me="${m.id}">${esc(m.name)}</button>`).join("")}</div>
+    <button type="button" class="btn sm ghost" data-melater>나중에</button></div>`;
+  document.body.appendChild(o);
+  o.addEventListener("click",e=>{const b=e.target.closest("[data-me]");if(b){setMe(b.dataset.me);renderMe();rerenderFb();o.remove();toast(`${mem(b.dataset.me).name}님으로 기억할게요 · 위쪽 '나'에서 바꿀 수 있어요`);return}
+    if(e.target.closest("[data-melater]")||e.target===o)o.remove()})}
 const whoSel=(attr,v)=>`<label class="who">쓴 사람 <select ${attr} aria-label="쓴 사람"><option value="">이름 고르기</option>${activeMembers().map(m=>`<option value="${m.id}" ${m.id===v?"selected":""}>${esc(m.name)}</option>`).join("")}</select></label>`;
 function fbThread(q,ph){const key=fbKey(q);FBQ[key]=q;const list=fbOf(q),open=S.fbOpen===key;
   return `<div class="fbt">${list.map(f=>S.fbEdit===f.id?`<div class="fbb"><textarea data-fbetext="${f.id}" aria-label="피드백 고치기">${esc(f.text)}</textarea>
@@ -601,16 +618,16 @@ document.addEventListener("click",async e=>{const t=e.target.closest("[data-fbop
   if(t.hasAttribute("data-fbecancel")){S.fbEdit=null;rerenderFb();return}
   if(t.dataset.fbadd){const key=t.dataset.fbadd,ta=document.querySelector(`[data-fbtext="${CSS.escape(key)}"]`),txt=(ta&&ta.value||"").trim();if(!txt){toast("내용을 적어 주세요");return}
     const ws=document.querySelector(`[data-fbwho="${CSS.escape(key)}"]`),who=ws&&ws.value;if(!who){toast("쓴 사람 이름을 골라 주세요");if(ws){ws.focus();ws.classList.add("need")}return}
-    if(who!==meId()){store(meKey(),who);renderMe()}
+    if(who!==meId()){setMe(who);renderMe()}
     t.disabled=true;try{const f=await api.fbAdd(FBQ[key],who,txt);S.D.fbs.push(f);S.fbOpen=null;rerenderFb();toast("피드백을 추가했어요")}catch(err){t.disabled=false;toast(errText(err))}return}
   if(t.dataset.fbedit){S.fbEdit=t.dataset.fbedit;S.fbOpen=null;rerenderFb();return}
   if(t.dataset.fbesave){const id=t.dataset.fbesave,ta=document.querySelector(`[data-fbetext="${CSS.escape(id)}"]`),txt=(ta&&ta.value||"").trim();if(!txt){toast("내용을 적어 주세요");return}
     const ws=document.querySelector(`[data-fbewho="${CSS.escape(id)}"]`),who=ws&&ws.value;if(!who){toast("쓴 사람 이름을 골라 주세요");if(ws){ws.focus();ws.classList.add("need")}return}
-    if(who!==meId()){store(meKey(),who);renderMe()}
+    if(who!==meId()){setMe(who);renderMe()}
     try{await api.fbEdit(id,txt,who);const f=S.D.fbs.find(x=>x.id===id);if(f){f.text=txt;f.author_id=who;f.updated_at=new Date().toISOString()}S.fbEdit=null;rerenderFb();toast("고쳤어요")}catch(err){toast(errText(err))}return}
   if(t.dataset.fbdel){if(!confirm("이 피드백을 지울까요?"))return;try{await api.fbDel(t.dataset.fbdel);S.D.fbs=S.D.fbs.filter(x=>x.id!==t.dataset.fbdel);rerenderFb();toast("지웠어요")}catch(err){toast(errText(err))}}});
 function renderMe(){const el=$("meSel");if(!el||!S.D)return;const v=meId();el.innerHTML=`<option value="">이름 고르기</option>`+activeMembers().map(m=>`<option value="${m.id}" ${m.id===v?"selected":""}>${esc(m.name)}</option>`).join("");
-  el.onchange=()=>{store(meKey(),el.value||null);rerenderFb();toast(el.value?`${mem(el.value).name} 이름으로 피드백이 저장돼요`:"이름 없이 저장돼요")}}
+  el.onchange=()=>{setMe(el.value);rerenderFb();toast(el.value?`${mem(el.value).name} 이름으로 피드백이 저장돼요`:"이름 없이 저장돼요")}}
 
 /* ---------- 오늘 연습 화면 ---------- */
 const grpMembers=rows=>{const seen=[];rows.slice().sort((a,b)=>a.ord-b.ord).forEach(a=>{if(!seen.includes(a.member_id))seen.push(a.member_id)});return seen};
@@ -909,7 +926,7 @@ async function enter(){
 async function start(){
   try{await reload()}catch(e){if(String(e.message).includes("PRAC_CLOSED")){store("osce-plan-ok",null);$("closed").hidden=false;$("app").hidden=true;return}toast(errText(e));$("app").hidden=true;return}
   $("closed").hidden=true;$("app").hidden=false;store("osce-plan-ok","1");
-  if(S.D.role==="member")S.role="member";document.body.classList.toggle("member",S.role==="member");renderMcode();renderMe();
+  if(S.D.role==="member")S.role="member";document.body.classList.toggle("member",S.role==="member");renderMcode();renderMe();setTimeout(askMe,300);
   $("unitName").textContent=`${S.D.unit==="DEMO"?"데모":S.D.unit} ${(S.D.teams||[]).length>1?`(${S.D.teams.join("·")}조 함께)`:"조"} 연습`;
   if(S.role!=="member"&&(!S.D.members.length||!S.D.problems.length))setTab("setup");else{setTab("today");loadDate(S.date)}}
 function renderMcode(){const el=$("mcode");if(S.role==="member"||!S.D.member_code){el.hidden=true;return}el.hidden=false;
