@@ -282,6 +282,7 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
 .mepick-b h2{margin:0;font-size:1.2rem}
 .mepick-b p{margin:0;font-size:.86rem;color:var(--muted)}
 .mepick-b [data-melater]{justify-self:end}
+.autoerr{font-size:.74rem;color:var(--out);font-weight:600;max-width:260px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.86rem;font-weight:500;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 @media (max-width:440px){.brand h1{display:none}}
@@ -609,27 +610,32 @@ function askMe(){if(meId()||!S.D||S.meAsked||!activeMembers().length)return;S.me
     if(e.target.closest("[data-melater]")||e.target===o)o.remove()})}
 const whoSel=(attr,v)=>`<label class="who">쓴 사람 <select ${attr} aria-label="쓴 사람"><option value="">이름 고르기</option>${activeMembers().map(m=>`<option value="${m.id}" ${m.id===v?"selected":""}>${esc(m.name)}</option>`).join("")}</select></label>`;
 function fbThread(q,ph){const key=fbKey(q);FBQ[key]=q;const list=fbOf(q),open=S.fbOpen===key;
-  return `<div class="fbt">${list.map(f=>S.fbEdit===f.id?`<div class="fbb"><textarea data-fbetext="${f.id}" aria-label="피드백 고치기">${esc(f.text)}</textarea>
+  return `<div class="fbt">${list.map(f=>S.fbEdit===f.id?`<div class="fbb"><textarea data-fbetext="${f.id}" aria-label="피드백 고치기">${esc(S.fbEditDraft!=null?S.fbEditDraft:f.text)}</textarea>
       <div class="fbadd"><div class="row">${whoSel(`data-fbewho="${f.id}"`,f.author_id||meId())}<button class="btn sm ghost" type="button" data-fbecancel>취소</button><button class="btn sm primary" type="button" data-fbesave="${f.id}">저장</button></div></div></div>`
     :`<div class="fbb"><div class="fbh">${mem(f.author_id)?`<b>${esc(mem(f.author_id).name)}</b>`:`<b class="anon">이름 없음</b>`}<small>${fbWhen(f.created_at)}${f.updated_at&&f.updated_at!==f.created_at&&new Date(f.updated_at)-new Date(f.created_at)>60000?" · 고침":""}</small>
       <span class="acts"><button type="button" data-fbedit="${f.id}">고치기</button><button type="button" data-fbdel="${f.id}">지우기</button></span></div><div class="fbx">${esc(f.text)}</div></div>`).join("")}
-    ${open?`<div class="fbadd"><textarea data-fbtext="${key}" placeholder="${esc(ph||"피드백")}" aria-label="피드백 쓰기"></textarea>
+    ${open?`<div class="fbadd"><textarea data-fbtext="${key}" placeholder="${esc(ph||"피드백")}" aria-label="피드백 쓰기">${esc(fbDraft(key))}</textarea>
       <div class="row">${whoSel(`data-fbwho="${key}"`,meId())}<button class="btn sm ghost" type="button" data-fbcancel>취소</button><button class="btn sm primary" type="button" data-fbadd="${key}">추가</button></div></div>`
-    :`<button class="fbplus" type="button" data-fbopen="${key}">+ 피드백${list.length?" 더 쓰기":" 쓰기"}</button>`}</div>`}
+    :`<button class="fbplus" type="button" data-fbopen="${key}">+ 피드백${list.length?" 더 쓰기":" 쓰기"}${fbDraft(key)?` <span class="hint">(쓰던 글 있음)</span>`:""}</button>`}</div>`}
+/* 쓰던 피드백은 이 기기에 자동 보관 (새로고침·화면 다시 그려도 안 날아감) */
+const fbdKey=k=>"osce-prac-fbd-"+k;
+function fbDraft(k){return store(fbdKey(k))||""}
+document.addEventListener("input",e=>{const t=e.target;if(t.dataset&&t.dataset.fbtext!==undefined){store(fbdKey(t.dataset.fbtext),t.value||null)}
+  else if(t.dataset&&t.dataset.fbetext!==undefined){S.fbEditDraft=t.value}});
 function rerenderFb(){if(S.tab==="today")renderResult();else if(S.tab==="stats")renderStats()}
 document.addEventListener("click",async e=>{const t=e.target.closest("[data-fbopen],[data-fbcancel],[data-fbadd],[data-fbedit],[data-fbdel],[data-fbesave],[data-fbecancel]");if(!t)return;
   if(t.dataset.fbopen){S.fbOpen=t.dataset.fbopen;S.fbEdit=null;rerenderFb();const ta=document.querySelector(`[data-fbtext="${CSS.escape(S.fbOpen)}"]`);if(ta)ta.focus();return}
   if(t.hasAttribute("data-fbcancel")){S.fbOpen=null;rerenderFb();return}
-  if(t.hasAttribute("data-fbecancel")){S.fbEdit=null;rerenderFb();return}
+  if(t.hasAttribute("data-fbecancel")){S.fbEdit=null;S.fbEditDraft=null;rerenderFb();return}
   if(t.dataset.fbadd){const key=t.dataset.fbadd,ta=document.querySelector(`[data-fbtext="${CSS.escape(key)}"]`),txt=(ta&&ta.value||"").trim();if(!txt){toast("내용을 적어 주세요");return}
     const ws=document.querySelector(`[data-fbwho="${CSS.escape(key)}"]`),who=ws&&ws.value;if(!who){toast("쓴 사람 이름을 골라 주세요");if(ws){ws.focus();ws.classList.add("need")}return}
     if(who!==meId()){setMe(who);renderMe()}
-    t.disabled=true;try{const f=await api.fbAdd(FBQ[key],who,txt);S.D.fbs.push(f);S.fbOpen=null;rerenderFb();toast("피드백을 추가했어요")}catch(err){t.disabled=false;toast(errText(err))}return}
-  if(t.dataset.fbedit){S.fbEdit=t.dataset.fbedit;S.fbOpen=null;rerenderFb();return}
+    t.disabled=true;try{const f=await api.fbAdd(FBQ[key],who,txt);S.D.fbs.push(f);store(fbdKey(key),null);S.fbOpen=null;rerenderFb();toast("피드백을 추가했어요")}catch(err){t.disabled=false;toast(errText(err))}return}
+  if(t.dataset.fbedit){S.fbEdit=t.dataset.fbedit;S.fbEditDraft=null;S.fbOpen=null;rerenderFb();return}
   if(t.dataset.fbesave){const id=t.dataset.fbesave,ta=document.querySelector(`[data-fbetext="${CSS.escape(id)}"]`),txt=(ta&&ta.value||"").trim();if(!txt){toast("내용을 적어 주세요");return}
     const ws=document.querySelector(`[data-fbewho="${CSS.escape(id)}"]`),who=ws&&ws.value;if(!who){toast("쓴 사람 이름을 골라 주세요");if(ws){ws.focus();ws.classList.add("need")}return}
     if(who!==meId()){setMe(who);renderMe()}
-    try{await api.fbEdit(id,txt,who);const f=S.D.fbs.find(x=>x.id===id);if(f){f.text=txt;f.author_id=who;f.updated_at=new Date().toISOString()}S.fbEdit=null;rerenderFb();toast("고쳤어요")}catch(err){toast(errText(err))}return}
+    try{await api.fbEdit(id,txt,who);const f=S.D.fbs.find(x=>x.id===id);if(f){f.text=txt;f.author_id=who;f.updated_at=new Date().toISOString()}S.fbEdit=null;S.fbEditDraft=null;rerenderFb();toast("고쳤어요")}catch(err){toast(errText(err))}return}
   if(t.dataset.fbdel){if(!confirm("이 피드백을 지울까요?"))return;try{await api.fbDel(t.dataset.fbdel);S.D.fbs=S.D.fbs.filter(x=>x.id!==t.dataset.fbdel);rerenderFb();toast("지웠어요")}catch(err){toast(errText(err))}}});
 function renderMe(){const el=$("meSel");if(!el||!S.D)return;const v=meId();el.innerHTML=`<option value="">이름 고르기</option>`+activeMembers().map(m=>`<option value="${m.id}" ${m.id===v?"selected":""}>${esc(m.name)}</option>`).join("");
   el.onchange=()=>{setMe(el.value);rerenderFb();toast(el.value?`${mem(el.value).name} 이름으로 피드백이 저장돼요`:"이름 없이 저장돼요")}}
@@ -637,7 +643,7 @@ function renderMe(){const el=$("meSel");if(!el||!S.D)return;const v=meId();el.in
 /* ---------- 오늘 연습 화면 ---------- */
 const grpMembers=rows=>{const seen=[];rows.slice().sort((a,b)=>a.ord-b.ord).forEach(a=>{if(!seen.includes(a.member_id))seen.push(a.member_id)});return seen};
 function loadDate(date){
-  if(date!==S.date)S.vslot=1;S.date=date;S.open=null;const d=dayOf(date);
+  if(date!==S.date){S.vslot=1;S.autoErr="";S.autoFail=""}S.date=date;S.open=null;const d=dayOf(date);
   if(d){S.savedId=d.id;S.slots=d.slots;S.setIds=d.problem_set.slice();S.draft=d.assigns.map(a=>({...a}));S.dirty=false;
     S.present=new Set(d.assigns.map(a=>a.member_id));S.sizes={};
     for(let s=1;s<=d.slots;s++){const rows=d.assigns.filter(a=>a.slot===s);const grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);S.sizes[s]=grps.map(g=>grpMembers(rows.filter(a=>a.grp===g)).length).join(",")}}
@@ -684,7 +690,9 @@ function pickSetType(t,k){const all=pickSet(k,S.setIds.filter(id=>prob(id).type=
 function markDirty(){if(S.draft)S.dirty=true;renderStatus()}
 function renderStatus(){const share=S.draft&&S.draft.length?`<button class="btn sm" type="button" id="copyDay">텍스트</button><button class="btn sm" type="button" id="imgDay">이미지</button>`:"";
   if(S.role==="member")$("resStatus").innerHTML=share;
-  else $("resStatus").innerHTML=!S.draft?"":(S.dirty||!S.savedId?`<span class="tag draft">저장 안 됨</span><button class="btn sm primary" type="button" id="saveDay">저장</button>`:`<span class="tag saved">저장됨</span>`)+share;
+  else $("resStatus").innerHTML=!S.draft?"":(S.saving?`<span class="tag draft">저장 중…</span>`:S.dirty||!S.savedId?`<span class="tag draft" ${S.autoErr?`title="${esc(S.autoErr)}"`:""}>${S.autoErr?"자동 저장 안 됨":"곧 자동 저장"}</span><button class="btn sm primary" type="button" id="saveDay">저장</button>`:`<span class="tag saved">✓ 저장됨</span>`)+share;
+  if(S.autoErr&&(S.dirty||!S.savedId)&&S.role!=="member")$("resStatus").insertAdjacentHTML("afterbegin",`<span class="autoerr">${esc(S.autoErr)}</span>`);
+  scheduleAuto();
   const sv=$("saveDay");if(sv)sv.onclick=saveDay;const cp=$("copyDay");if(cp)cp.onclick=copyDay;const im=$("imgDay");if(im)im.onclick=shareImage}
 function nGroupsMax(){if(S.draft&&S.draft.length){const c={};S.draft.forEach(a=>{(c[a.slot]=c[a.slot]||new Set()).add(a.grp)});return Math.max(0,...Object.values(c).map(x=>x.size))}
   let m=0;for(let s=1;s<=(S.slots||1);s++)m=Math.max(m,parseSizes(S.sizes[s]??autoSizes(S.present.size).join(",")).length);return m}
@@ -726,7 +734,7 @@ function renderResult(){
   el.innerHTML=h;
   el.querySelectorAll("[data-vs]").forEach(b=>b.onclick=()=>{const v=Number(b.dataset.vs);if(!v)return;S.vslot=v;S.fbOpen=null;renderResult()});
   const as=$("addSlot");if(as)as.onclick=addSlot;const rs=$("reSlot");if(rs)rs.onclick=()=>reSlot(S.vslot);
-  const ds=$("delSlot");if(ds)ds.onclick=()=>{const v=S.vslot;if(!confirm(`${v}타임을 뺄까요?${S.savedId?" (저장해야 반영돼요)":""}`))return;S.draft=S.draft.filter(a=>a.slot!==v);S.slots=Math.max(...S.draft.map(a=>a.slot));delete S.sizes[v];S.vslot=S.slots;S.dirty=true;renderToday()};
+  const ds=$("delSlot");if(ds)ds.onclick=()=>{const v=S.vslot;if(!confirm(`${v}타임을 뺄까요?`))return;S.draft=S.draft.filter(a=>a.slot!==v);S.slots=Math.max(...S.draft.map(a=>a.slot));delete S.sizes[v];S.vslot=S.slots;S.dirty=true;renderToday()};
   el.querySelectorAll("[data-gm]").forEach(sel=>sel.onchange=()=>{const [s,old]=sel.dataset.gm.split("|"),nv=sel.value,slot=Number(s);
     S.draft.filter(a=>a.slot===slot).forEach(a=>{if(a.member_id===old)a.member_id="__tmp";else if(a.member_id===nv)a.member_id=old});
     S.draft.filter(a=>a.member_id==="__tmp").forEach(a=>a.member_id=nv);markDirty();renderResult()});
@@ -740,10 +748,10 @@ function addSlot(){if(S.present.size<2){toast("나오는 사람을 2명 이상 �
   const n=Math.max(0,...(S.draft||[]).map(a=>a.slot))+1;if(n>6){toast("타임은 6개까지예요");return}
   for(const id of S.draft.map(a=>a.member_id))if(!S.present.has(id)){toast("나오는 사람 목록이 바뀌었어요 · 전체 다시 짜기를 써 주세요");return}
   S.slots=n;S.sizes[n]=S.sizes[n]??autoSizes(S.present.size).join(",");
-  S.setIds=pickSet(maxSize(),S.setIds);S.draft=generate(n);S.vslot=n;S.dirty=true;renderToday();toast(`${n}타임을 짰어요 · 저장해 주세요 (앞 타임은 그대로)`)}
+  S.setIds=pickSet(maxSize(),S.setIds);S.draft=generate(n);S.vslot=n;S.dirty=true;renderToday();toast(`${n}타임을 짰어요 (앞 타임은 그대로) · 자동 저장돼요`)}
 function reSlot(v){const sum=parseSizes(S.sizes[v]??autoSizes(S.present.size).join(",")).reduce((a,b)=>a+b,0);if(sum!==S.present.size){toast(`${v}타임 조 인원 합(${sum})이 나오는 사람 수(${S.present.size})와 달라요.`);return}
   if(S.savedId&&!confirm(`${v}타임만 새로 짤까요? (다른 타임은 그대로)`))return;
-  S.setIds=pickSet(maxSize(),S.setIds);S.draft=generate(v);S.vslot=v;S.dirty=true;renderToday();toast(`${v}타임만 다시 짰어요 · 저장해 주세요`)}
+  S.setIds=pickSet(maxSize(),S.setIds);S.draft=generate(v);S.vslot=v;S.dirty=true;renderToday();toast(`${v}타임만 다시 짰어요 · 자동 저장돼요`)}
 {let sx=0,sy=0;const r=document.getElementById("result");if(r){r.addEventListener("touchstart",e=>{const t=e.touches[0];sx=t.clientX;sy=t.clientY},{passive:true});
   r.addEventListener("touchend",e=>{if(e.target.closest("select,textarea,input"))return;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)<70||Math.abs(dy)>Math.abs(dx)*.6)return;
     const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort((a,b)=>a-b),ix=slots.indexOf(S.vslot),nx=slots[ix+(dx<0?1:-1)];if(nx){S.vslot=nx;S.fbOpen=null;renderResult()}},{passive:true})}}
@@ -754,12 +762,25 @@ function validate(){if(S.present.size<2)return "나오는 사람을 2명 이상 
 function doGenerate(){const v=validate();if(v){toast(v);return}
   if(S.draft&&S.draft.length&&!confirm(`모든 타임(${S.slots}타임)을 새로 짤까요? 한 타임만 바꾸려면 오른쪽 '🎲 n타임만 다시'를, 더 하려면 '+ 타임 추가'를 쓰세요.`))return;
   S.setIds=pickSet(maxSize(),S.setIds);
-  S.draft=generate();S.vslot=1;S.dirty=true;renderToday();toast("짰어요 · 마음에 들면 저장해 주세요")}
-async function saveDay(){const v=validate();if(v){toast(v);return}
-  for(let s=1;s<=S.slots;s++){const rows=S.draft.filter(a=>a.slot===s);const k=rows.map(a=>a.member_id+"|"+(prob(a.problem_id)||{}).type);if(k.length!==new Set(k).size){toast(`${s}타임에 같은 사람이 같은 형을 두 번 풀어요`);return}
-    const byM={};rows.forEach(a=>(byM[a.member_id]=byM[a.member_id]||new Set()).add(a.grp));if(Object.values(byM).some(x=>x.size>1)){toast(`${s}타임에 한 사람이 두 조에 있어요`);return}}
-  const slots=Math.max(...S.draft.map(a=>a.slot));const keepV=S.vslot;
-  try{S.D=await api.saveDay(S.date,slots,S.setIds,S.draft.map(a=>({slot:a.slot,grp:a.grp,ord:a.ord,member_id:a.member_id,problem_id:a.problem_id})));normD();loadDate(S.date);if(keepV){S.vslot=keepV;renderResult()}toast("저장했어요 · 피드백 칸이 열렸어요")}catch(e){toast(errText(e))}}
+  S.draft=generate();S.vslot=1;S.dirty=true;renderToday();toast("짰어요 · 자동 저장돼요")}
+/* 자동 저장: 조 편성이 바뀌면 1.2초 뒤 저장 (문제가 있으면 이유를 보여 주고 기다림) */
+const autoSig=()=>JSON.stringify([S.date,S.draft,[...S.present].sort(),S.sizes,S.setIds,S.slots]);
+function scheduleAuto(){clearTimeout(S.autoT);if(S.role==="member"||!S.draft||!S.draft.length||S.saving||!(S.dirty||!S.savedId))return;
+  if(S.autoFail&&S.autoFail===autoSig())return;S.autoT=setTimeout(()=>saveDay(true),1200)}
+function saveCheck(){const v=validate();if(v)return v;
+  for(let s=1;s<=S.slots;s++){const rows=S.draft.filter(a=>a.slot===s);const k=rows.map(a=>a.member_id+"|"+(prob(a.problem_id)||{}).type);if(k.length!==new Set(k).size)return `${s}타임에 같은 사람이 같은 형을 두 번 풀어요`;
+    const byM={};rows.forEach(a=>(byM[a.member_id]=byM[a.member_id]||new Set()).add(a.grp));if(Object.values(byM).some(x=>x.size>1))return `${s}타임에 한 사람이 두 조에 있어요`}
+  return ""}
+async function saveDay(auto){clearTimeout(S.autoT);if(S.saving||!S.draft||!S.draft.length)return;const v=saveCheck();
+  if(v){if(auto===true){S.autoErr=v;S.autoFail=autoSig();renderStatus()}else toast(v);return}
+  const slots=Math.max(...S.draft.map(a=>a.slot));const keepV=S.vslot,sig=autoSig(),date=S.date,first=!S.savedId;
+  S.saving=true;S.autoErr="";S.autoFail="";renderStatus();
+  try{const D=await api.saveDay(date,slots,S.setIds,S.draft.map(a=>({slot:a.slot,grp:a.grp,ord:a.ord,member_id:a.member_id,problem_id:a.problem_id})));S.saving=false;S.D=D;normD();
+    if(S.date!==date||autoSig()!==sig){/* 저장하는 사이에 또 바뀜 → 화면은 그대로 두고 다시 저장 */const d=dayOf(date);if(S.date===date&&d){S.savedId=d.id;S.dirty=true}renderStatus();return}
+    loadDate(S.date);if(keepV){S.vslot=keepV;renderResult()}
+    if(auto!==true||first)toast(first?"저장했어요 · 피드백 칸이 열렸어요":"저장했어요")}
+  catch(e){S.saving=false;S.autoErr=errText(e);S.autoFail=sig;renderStatus();if(auto!==true)toast(errText(e))}}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden"&&S.autoT&&(S.dirty||!S.savedId)&&S.draft&&S.draft.length)saveDay(true)});
 /* 공유용: 화면에 보이는 편성(저장 전이어도) 기준 */
 function planData(){const day=dayOf(S.date);const skipped=S.savedId&&!S.dirty&&day?(day.skipped||[]):[];
   const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort().filter(s=>!skipped.includes(s)).map(s=>{const rows=S.draft.filter(a=>a.slot===s);
