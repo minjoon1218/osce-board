@@ -46,6 +46,8 @@ body{background:var(--bg);color:var(--fg);font-family:var(--t-sans);font-size:15
 button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;padding:0}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
 .mono{font-family:var(--t-mono);font-variant-numeric:tabular-nums}
+html.embed .top .tabs,html.embed #themeBtn{display:none}
+html.embed .wrap{padding-block:4px 12px}
 .wrap{max-width:1280px;margin:0 auto;padding-block:18px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:16px}
 
 /* header */
@@ -239,10 +241,15 @@ html,body{overflow-x:clip;max-width:100%}
 </style>
 </head>
 <body>
+<script>
+/* 연습 플랜 안에 끼워 볼 때(?embed=1)는 위쪽 탭 숨김 · 연습 플랜을 쓰는 기기면 '연습 플랜' 탭 보이기 */
+(()=>{try{if(new URLSearchParams(location.search).has("embed"))document.documentElement.classList.add("embed");
+  }catch(e){}})();
+</script>
 <div class="wrap">
   <header class="top">
     <div class="lead">
-      <nav class="tabs" aria-label="페이지"><a href="index.html">예약</a><a href="view.html" aria-current="page">현황판</a></nav>
+      <nav class="tabs" aria-label="페이지"><a href="index.html">예약</a><a href="view.html" aria-current="page">현황판</a><a href="plan.html" id="planTab" hidden>연습 플랜</a></nav>
       <h1>오스키실 현황판</h1>
     </div>
     <div class="right">
@@ -251,6 +258,7 @@ html,body{overflow-x:clip;max-width:100%}
       <button class="iconbtn" id="themeBtn" type="button" aria-label="다크 모드로 바꾸기">☾</button>
     </div>
   </header>
+  <script>try{if(localStorage.getItem("osce-plan-ok")==="1")document.getElementById("planTab").removeAttribute("hidden")}catch(e){}</script>
 
   <div class="demo" id="demo" hidden>미리보기 모드예요. 지금 보이는 신청은 예시예요. config.js에 Supabase 정보가 들어가면 실제 예약이 실시간으로 보여요.</div>
   <div class="notices" id="notices"></div>

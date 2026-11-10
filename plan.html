@@ -89,7 +89,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .codein{font-family:var(--t-mono);font-size:1.3rem;letter-spacing:.2em;text-transform:uppercase;text-align:center;padding:12px}
 .msg{font-size:.84rem;min-height:1.2em;font-weight:600}.msg.err{color:var(--out)}
 /* ---- 연습 플랜 (조원 연습) ---- */
-.ptabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--sunk);padding:3px;border-radius:10px;max-width:420px}
+.ptabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--sunk);padding:3px;border-radius:10px;max-width:520px}
 .ptabs button{padding:8px 0;border-radius:8px;font-weight:700;font-size:.88rem;color:var(--muted)}
 .ptabs button[aria-selected="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.1)}
 .toprow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
@@ -175,7 +175,8 @@ textarea.bulk{width:100%;min-height:90px;border:1px solid var(--line-strong);bor
 .mcode b{font-family:var(--t-mono);font-size:1.05rem;letter-spacing:.12em;color:var(--accent-ink)}
 .mcode .hint{margin-right:auto}
 body.member .lead{display:none!important}
-body.member .ptabs{grid-template-columns:repeat(2,1fr)}
+body.member .ptabs{grid-template-columns:repeat(3,1fr)}
+#boardFrame{width:100%;border:0;display:block;min-height:600px;background:transparent}
 .atxt{font-size:.88rem;font-weight:600;min-width:0}
 .addlog{border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px;background:var(--sunk)}
 .addlog .two{gap:6px}
@@ -231,6 +232,7 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
         <button type="button" role="tab" data-tab="today" aria-selected="true">오늘 연습</button>
         <button type="button" role="tab" data-tab="stats" aria-selected="false">기록</button>
         <button type="button" role="tab" data-tab="setup" aria-selected="false" class="lead">조원·질환</button>
+        <button type="button" role="tab" data-tab="board" aria-selected="false">현황판</button>
       </div>
     </div>
 
@@ -283,6 +285,7 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
     </div>
 
     <!-- 조원·질환 -->
+    <div id="tab-board" hidden><iframe id="boardFrame" title="오스키실 현황판" loading="lazy"></iframe></div>
     <div id="tab-setup" hidden class="grid2">
       <section class="card">
         <div class="card-h"><h2>조원 이름</h2><span class="meta" id="memMeta"></span></div>
@@ -698,8 +701,12 @@ $("bulkGo").onclick=()=>{let n=0,bad=[];for(const line of $("bulkIn").value.spli
   renderSetup();$("probMsg").className=bad.length?"msg err":"msg";$("probMsg").textContent=`${n}개 넣었어요${bad.length?` · 못 읽은 줄: ${bad.slice(0,3).join(" / ")}`:""} · 저장을 눌러야 반영돼요`;if(!bad.length)$("bulkIn").value=""};
 
 /* ---------- 탭 · 시작 ---------- */
+/* 현황판 탭: view.html을 그대로 끼워 넣고 높이를 내용에 맞춤 */
+function openBoard(){const f=$("boardFrame");if(f.dataset.on)return;f.dataset.on="1";f.src="view.html?embed=1";
+  const fit=()=>{try{const d=f.contentDocument;if(d&&d.documentElement)f.style.height=Math.max(600,d.documentElement.scrollHeight)+"px"}catch(e){}};
+  f.onload=()=>{fit();try{new ResizeObserver(fit).observe(f.contentDocument.body)}catch(e){setInterval(fit,1500)}}}
 function setTab(t){if(S.role==="member"&&t==="setup")t="today";S.tab=t;document.querySelectorAll(".ptabs [data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
-  ["today","stats","setup"].forEach(x=>$("tab-"+x).hidden=x!==t);if(t==="stats")renderStats();if(t==="setup")setupInit();if(t==="today")renderToday()}
+  ["today","stats","setup","board"].forEach(x=>$("tab-"+x).hidden=x!==t);if(t==="board")openBoard();if(t==="stats")renderStats();if(t==="setup")setupInit();if(t==="today")renderToday()}
 document.querySelectorAll(".ptabs [data-tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 $("dateIn").onchange=()=>{if(!$("dateIn").value)return;if(!confirmLeave()){$("dateIn").value=S.date;return}loadDate($("dateIn").value)};
 $("setAuto").onclick=()=>{S.setIds=pickSet(Math.max(3,maxSize()));markDirty();renderSet()};
@@ -713,7 +720,7 @@ function syncThemeBtn(){const dark=document.documentElement.getAttribute("data-t
 $("themeBtn").onclick=()=>{const next=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",next);store("osce-theme",next);syncThemeBtn()};syncThemeBtn();
 function renderAuth(){const el=$("authSlot");if(!S.code){el.innerHTML="";return}
   el.innerHTML=`<button class="who" type="button" id="whoBtn"><span class="dot">${S.role==="admin"?"★":S.role==="member"?"👥":esc((S.team||"?").slice(0,2))}</span>${S.role==="admin"?"관리자":S.role==="member"?"조원":esc(S.team)+"조"}</button>`;
-  $("whoBtn").onclick=()=>{if(!confirm(S.role==="member"?"로그아웃할까요?":"로그아웃할까요? (예약판도 같이 로그아웃돼요)"))return;(S.role==="member"?["osce-prac-code"]:["osce-code","osce-role","osce-team"]).forEach(k=>store(k,null));location.reload()}}
+  $("whoBtn").onclick=()=>{if(!confirm(S.role==="member"?"로그아웃할까요?":"로그아웃할까요? (예약판도 같이 로그아웃돼요)"))return;(S.role==="member"?["osce-prac-code","osce-plan-ok"]:["osce-code","osce-role","osce-team","osce-plan-ok"]).forEach(k=>store(k,null));location.reload()}}
 function showGate(){$("gate").hidden=false;$("app").hidden=true;$("closed").hidden=true;renderAuth();setTimeout(()=>$("codeIn").focus(),50)}
 async function enter(){
   renderAuth();$("gate").hidden=true;
@@ -723,8 +730,8 @@ async function enter(){
     $("unitSel").onchange=async()=>{if(!confirmLeave()){$("unitSel").value=S.unit;return}S.unit=$("unitSel").value;store("osce-prac-unit",S.unit);await start()}}
   await start()}
 async function start(){
-  try{await reload()}catch(e){if(String(e.message).includes("PRAC_CLOSED")){$("closed").hidden=false;$("app").hidden=true;return}toast(errText(e));$("app").hidden=true;return}
-  $("closed").hidden=true;$("app").hidden=false;
+  try{await reload()}catch(e){if(String(e.message).includes("PRAC_CLOSED")){store("osce-plan-ok",null);$("closed").hidden=false;$("app").hidden=true;return}toast(errText(e));$("app").hidden=true;return}
+  $("closed").hidden=true;$("app").hidden=false;store("osce-plan-ok","1");
   if(S.D.role==="member")S.role="member";document.body.classList.toggle("member",S.role==="member");renderMcode();
   $("unitName").textContent=`${S.D.unit==="DEMO"?"데모":S.D.unit} ${(S.D.teams||[]).length>1?`(${S.D.teams.join("·")}조 함께)`:"조"} 연습`;
   if(S.role!=="member"&&(!S.D.members.length||!S.D.problems.length))setTab("setup");else{setTab("today");loadDate(S.date)}}
