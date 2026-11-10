@@ -289,7 +289,7 @@ textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(
 <header class="bar">
   <div class="bar-in">
     <div class="brand"><span class="logo" aria-hidden="true">OS</span><h1>오스키실 예약판</h1>
-      <nav class="tabs" aria-label="페이지"><a href="index.html" aria-current="page">예약</a><a href="view.html">현황판</a><a href="plan.html">연습 플랜</a></nav></div>
+      <nav class="tabs" aria-label="페이지"><a href="index.html" aria-current="page">예약</a><a href="view.html">현황판</a><a href="plan.html" id="planTab" hidden>연습 플랜</a></nav></div>
     <div class="datenav">
       <button class="iconbtn" id="prev" type="button" aria-label="이전 날">‹</button>
       <div class="datelabel"><span id="dateText"></span><input type="date" id="datePick" aria-label="날짜 선택"></div>
@@ -884,7 +884,7 @@ function openAccount(){
     <div class="field"><span>우리 조 다가오는 신청</span>
     ${mine.length?mine.map(b=>`<button class="btn" type="button" data-open="${b.id}" style="text-align:left">${md(b.date)} <span class="mono">${fmt(b.start)}–${fmt(b.end)}</span> · ${b.room}번 방${inUseNow(b)?" · <b>사용 중</b>":""}</button>`).join(""):`<span class="hint">아직 없어요.</span>`}</div>
     <div class="sep"></div>
-    <a class="btn" href="plan.html" style="text-align:center;text-decoration:none">📋 연습 플랜 짜기 <span class="hint">(형별 질환 → 일자별 배분·이미지 공유)</span></a>
+    ${canPlan()?`<a class="btn" href="plan.html" style="text-align:center;text-decoration:none">📋 연습 플랜 <span class="hint">(조 짜기·질환별 기록·피드백)</span></a>`:""}
     <button class="btn" type="button" id="logout">로그아웃</button>`;
   $("drawerBody").querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>{const x=S.bookings.find(y=>y.id===b.dataset.open);S.sel=x.date;render();openDetail(x.id)});
   logoutBtn();
@@ -1404,7 +1404,9 @@ function syncThemeBtn(){const dark=document.documentElement.getAttribute("data-t
 $("themeBtn").onclick=()=>{const next=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",next);store("osce-theme",next);syncThemeBtn()};
 
 function syncTeams(){window.OSCETeams.set([...(S.teamList||[]),...S.bookings.map(b=>b.team)])}
-function render(){syncTeams();renderAuth();renderNotices();renderTop();renderGrid();renderKits()}
+/* 연습 플랜: 관리자 + 1–N일차(rule_cfg.prac_max_day, 기본 4) 조장만 */
+function canPlan(){if(isAdmin())return true;if(!isLeader())return false;const r=ruleOf(S.team),mx=(S.cfg&&S.cfg.prac_max_day!=null)?S.cfg.prac_max_day:4;return !!(r&&r.exam_day!=null&&r.exam_day>=1&&r.exam_day<=mx)}
+function render(){syncTeams();renderAuth();{const pt=$("planTab");if(pt)pt.hidden=!canPlan()}renderNotices();renderTop();renderGrid();renderKits()}
 
 /* ================= 시작 ================= */
 (async function boot(){
