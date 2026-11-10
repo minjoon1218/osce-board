@@ -283,6 +283,26 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
 .mepick-b p{margin:0;font-size:.86rem;color:var(--muted)}
 .mepick-b [data-melater]{justify-self:end}
 .autoerr{font-size:.74rem;color:var(--out);font-weight:600;max-width:260px}
+.cfbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.cfbar .dfilter{margin-left:0}
+.cfbar .btn{margin-left:auto}
+.cflist{display:grid;gap:8px}
+.cfp{border:1px solid var(--line);border-left:4px solid var(--tc);border-radius:10px;background:var(--surface);overflow:hidden}
+.cfp>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px;flex-wrap:wrap}
+.cfp>summary::-webkit-details-marker{display:none}
+.cfp>summary::after{content:"▾";margin-left:6px;color:var(--faint);transition:transform .15s}
+.cfp[open]>summary::after{transform:rotate(180deg)}
+.cfp>summary b{font-size:.98rem}
+.cfp>summary small{margin-left:auto;color:var(--muted);font-size:.76rem}
+.cfp>summary .tbadge{margin:0}
+.cfp>summary .fbc{margin-left:0}
+.cfbody{display:grid;gap:10px;padding:2px 12px 12px;background:color-mix(in srgb,var(--tc) 4%,transparent)}
+.cfs{display:grid;gap:6px;padding-top:10px;border-top:1px dashed var(--line)}
+.cfs:first-child{border-top:0}
+.cfs-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.84rem}
+.cfs-h b{font-size:.92rem}
+.cfs-h span{color:var(--muted);font-family:var(--t-mono);font-size:.78rem}
+.cfs-h .today-case{font-family:inherit;color:var(--accent-ink);background:var(--accent-soft);border-radius:6px;padding:1px 6px;font-weight:800}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.86rem;font-weight:500;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 @media (max-width:440px){.brand h1{display:none}}
@@ -367,8 +387,8 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
         <div class="card-b"><div class="chips" id="memChips"></div><div class="scroll" id="memTbl"></div></div>
       </section>
       <section class="card">
-        <div class="card-h"><h2>사람별 합계</h2><span class="meta" id="statMeta"></span></div>
-        <div class="card-b"><div class="scroll" id="sumTbl"></div><span class="hint">오늘까지 저장된 연습만 세요 ('안 함'으로 표시한 타임은 빠져요). 직접 = 내가 푼 문제, 피드백 = 같은 조원이 푸는 걸 보고 피드백한 문제.</span></div>
+        <div class="card-h"><h2>질환별 피드백 모음</h2><span class="meta" id="statMeta"></span></div>
+        <div class="card-b"><div id="caseFb"></div></div>
       </section>
       <section class="card">
         <div class="card-h"><h2>전체 한눈에 (직접 푼 횟수)</h2></div>
@@ -506,11 +526,11 @@ const relItems=t=>{const out=[],seen=new Set();String(t||"").split(/\n|\s·\s/).
   const tm=m[3].match(/#([1-4][1-8]|[5-8][1-5])(?!\d)/);out.push({c,tooth:tm?"#"+tm[1]:""})});return out};
 const relCases=t=>relItems(t).map(x=>x.c);
 /* C형: 할 술기 + 치식 (질환 이름 = 술기 이름) */
-const skillFor=(a,date)=>{const p=prob(a.problem_id);if(!p||p.type!=="C")return "";const c=caseFor(a,date);const it=relItems(p.related).find(x=>x.c===c);return `${pkw(p)}${it&&it.tooth?" "+it.tooth:""}`};
+const skillFor=(a,date,src)=>{const p=prob(a.problem_id);if(!p||p.type!=="C")return "";const c=caseFor(a,date,src);const it=relItems(p.related).find(x=>x.c===c);return `${pkw(p)}${it&&it.tooth?" "+it.tooth:""}`};
 const hashStr=str=>{let h=2166136261;for(const ch of str){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0};
 const caseOrder=(a,date)=>{const p=prob(a.problem_id);const cs=p?relCases(p.related):[];return cs.map(c=>[hashStr(`${date}|${a.slot}|${a.member_id}|${a.problem_id}|${c}`),c]).sort((x,y)=>x[0]-y[0]).map(x=>x[1])};
 /* 같은 조·타임 안에서는 케이스 번호가 겹치지 않게 */
-const caseFor=(a,date)=>{const rows=(S.draft||[]).filter(x=>x.slot===a.slot&&x.grp===a.grp).sort((x,y)=>x.ord-y.ord);const used=new Set();
+const caseFor=(a,date,src)=>{const rows=(src||S.draft||[]).filter(x=>x.slot===a.slot&&x.grp===a.grp).sort((x,y)=>x.ord-y.ord);const used=new Set();
   for(const r of rows){const o=caseOrder(r,date);const c=o.find(x=>!used.has(x))||o[0]||"";if(c)used.add(c);if(r===a||(r.member_id===a.member_id&&r.problem_id===a.problem_id))return c}
   return caseOrder(a,date)[0]||""};
 /* 기록 집계: filter(day) 통과한 날, 안 함 타임 제외 */
@@ -831,13 +851,34 @@ async function shareImage(){try{const P=planData();const cv=drawPlan(P);
 const confirmLeave=()=>!(S.draft&&S.dirty)||confirm("저장 안 한 조 편성이 있어요. 버리고 이동할까요?");
 const memberLink=()=>`${location.origin}${location.pathname}?k=${encodeURIComponent(S.D.member_code||"")}`;
 
+/* ---------- 질환별 피드백 모음 ---------- */
+function renderCaseFb(){const el=$("caseFb");if(!el)return;const F=S.cfType||"all";S.cfOpen=S.cfOpen||new Set();
+  const sess={};/* problem → session key → {when,who,ctx,fbs} */
+  for(const f of (S.D.fbs||[])){const p=prob(f.problem_id);if(!p)continue;let k,info;
+    if(f.log_id){const l=(S.D.logs||[]).find(x=>x.id===f.log_id);if(!l)continue;k="l:"+l.id;info={date:l.date,slot:0,label:"직접 추가",cs:""}}
+    else{const d=S.D.days.find(x=>x.id===f.day_id);if(!d)continue;const a=(d.assigns||[]).find(x=>x.slot===f.slot&&x.member_id===f.member_id&&x.problem_id===f.problem_id)||{slot:f.slot,member_id:f.member_id,problem_id:f.problem_id,grp:0,ord:0};
+      const cs=caseFor(a,d.date,d.assigns||[]),sk=skillFor(a,d.date,d.assigns||[]);k=`a:${d.id}:${f.slot}:${f.member_id}`;info={date:d.date,slot:f.slot,label:`${f.slot}타임`,cs:cs?(sk?`${cs} → ${sk}`:cs):""}}
+    const P=(sess[p.id]=sess[p.id]||{});const x=(P[k]=P[k]||{...info,member:f.member_id,fbs:[]});x.fbs.push(f)}
+  const ps=S.D.problems.filter(p=>sess[p.id]).sort((a,b)=>a.type<b.type?-1:a.type>b.type?1:a.no-b.no);
+  const types=[...new Set(ps.map(p=>p.type))];const shown=ps.filter(p=>F==="all"||p.type===F);
+  const total=(S.D.fbs||[]).length;
+  let h=`<div class="cfbar"><span class="dfilter" role="group" aria-label="형">${[["all","전체"],...types.map(t=>[t,t+"형"])].map(([k,l])=>`<button type="button" data-cft="${k}" aria-pressed="${F===k}">${l}</button>`).join("")}</span>
+    <span class="hint">피드백 ${total}개 · 질환 ${ps.length}개</span>${shown.length?`<button class="btn sm ghost" type="button" id="cfAll">${shown.every(p=>S.cfOpen.has(p.id))?"모두 접기":"모두 펼치기"}</button>`:""}</div>`;
+  if(!shown.length)h+=`<div class="empty">아직 남긴 피드백이 없어요.</div>`;
+  h+=`<div class="cflist">`+shown.map(p=>{const list=Object.values(sess[p.id]).sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:b.slot-a.slot);const n=list.reduce((a,x)=>a+x.fbs.length,0);
+    return `<details class="cfp" style="${tStyle(p.type)}" data-cfp="${p.id}" ${S.cfOpen.has(p.id)?"open":""}><summary><span class="tbadge">${esc(pcode(p))}</span><b>${esc(p.name)}</b><span class="fbc">💬 ${n}</span><small>${list.length}회 · 최근 ${md(list[0].date)}</small></summary>
+      <div class="cfbody">${list.map(x=>`<div class="cfs"><div class="cfs-h"><b>${esc((mem(x.member)||{}).name||"?")}</b><span>${md(x.date)} ${esc(x.label)}</span>${x.cs?`<span class="today-case">${esc(x.cs)}</span>`:""}</div>
+        ${x.fbs.slice().sort((a,b)=>a.created_at<b.created_at?-1:1).map(f=>`<div class="fbb"><div class="fbh">${mem(f.author_id)?`<b>${esc(mem(f.author_id).name)}</b>`:`<b class="anon">이름 없음</b>`}<small>${fbWhen(f.created_at)}</small></div><div class="fbx">${esc(f.text)}</div></div>`).join("")}</div>`).join("")}</div></details>`}).join("")+`</div>`;
+  el.innerHTML=h;
+  el.querySelectorAll("[data-cft]").forEach(b=>b.onclick=()=>{S.cfType=b.dataset.cft;renderCaseFb()});
+  el.querySelectorAll("[data-cfp]").forEach(d=>d.addEventListener("toggle",()=>{d.open?S.cfOpen.add(d.dataset.cfp):S.cfOpen.delete(d.dataset.cfp);const b=$("cfAll");if(b)b.textContent=shown.every(p=>S.cfOpen.has(p.id))?"모두 접기":"모두 펼치기"}));
+  const ca=$("cfAll");if(ca)ca.onclick=()=>{const all=shown.every(p=>S.cfOpen.has(p.id));shown.forEach(p=>all?S.cfOpen.delete(p.id):S.cfOpen.add(p.id));renderCaseFb()}}
+
 /* ---------- 기록 ---------- */
 function renderStats(){
   const T=tally(d=>d.date<=ymd(),l=>l.date<=ymd());const ms=S.D.members.filter(m=>m.active||T.sol[m.id]||T.fbn[m.id]);const ps=S.D.problems.filter(p=>p.active||Object.values(T.solve).some(o=>o[p.id])).sort((a,b)=>a.type<b.type?-1:a.type>b.type?1:a.no-b.no);
   const nDays=new Set([...S.D.days.filter(d=>d.date<=ymd()).map(d=>d.date),...(S.D.logs||[]).filter(l=>l.date<=ymd()).map(l=>l.date)]).size;$("statMeta").textContent=`연습 ${nDays}일`;
-  $("sumTbl").innerHTML=ms.length?`<table class="stbl"><thead><tr><th>이름</th><th>직접</th><th>피드백</th><th>직접 비율</th><th>안 푼 질환</th></tr></thead><tbody>${ms.map(m=>{const s=T.sol[m.id]||0,f=T.fbn[m.id]||0,z=ps.filter(p=>p.active&&!g2(T.solve,m.id,p.id)).length;
-    return `<tr class="click" data-sm="${m.id}"><td class="nm">${esc(m.name)}${m.active?"":` <span class="hint">(쉬는 중)</span>`}</td><td>${s}</td><td>${f}</td><td>${s+f?Math.round(s/(s+f)*100)+"%":"–"}</td><td>${z}</td></tr>`}).join("")}</tbody></table>`:`<div class="empty">조원이 없어요.</div>`;
-  $("sumTbl").querySelectorAll("[data-sm]").forEach(r=>r.onclick=()=>{S.sel=r.dataset.sm;S.open=null;renderStats();$("memChips").scrollIntoView({behavior:"smooth",block:"start"})});
+  renderCaseFb();
   if(!S.sel||!ms.some(m=>m.id===S.sel))S.sel=(ms[0]||{}).id||null;
   $("memChips").innerHTML=ms.map(m=>`<button type="button" class="chip mchip" data-mc="${m.id}" aria-pressed="${m.id===S.sel}">${esc(m.name)}</button>`).join("");
   $("memChips").querySelectorAll("[data-mc]").forEach(b=>b.onclick=()=>{S.sel=b.dataset.mc;S.open=null;renderStats()});
