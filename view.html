@@ -328,7 +328,9 @@ const isToday=()=>S.sel===ymd();
 /* ---------- data ---------- */
 const cfg=window.OSCE_CONFIG||{};
 const LIVE=!!(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY&&window.supabase);
-const rowToBooking=r=>({id:r.id,date:r.date,room:r.room,start:r.start_min,end:r.end_min,day:r.day_label||"",team:r.team,content:r.content||"",kits:r.kits||[]});
+const rowToBooking=r=>({id:r.id,date:r.date,room:r.room,start:r.start_min,end:r.end_min,day:r.day_label||"",team:r.team,content:r.content||"",kits:r.kits||[],kitTimes:(r.kit_times||[]).map(t=>({k:t.k,s:+t.s,e:+t.e}))});
+/* 재료 실제 사용 구간 (kitTimes에 없으면 신청 시간 전체) */
+function kitRanges(b){const out=[];for(const k of b.kits||[]){const ts=(b.kitTimes||[]).filter(t=>t.k===k);if(ts.length)ts.forEach(t=>out.push({k,s:t.s,e:t.e}));else out.push({k,s:b.start,e:b.end})}return out}
 let load,subscribe;
 if(LIVE){
   const sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
@@ -513,7 +515,7 @@ function renderTimeline(){
 function kitState(id){
   const k=S.kits[id];
   if(k&&k.status==="out")return {cls:"out",t:"대여",w:k.who||""};
-  const t=ymd(),nm=nowMin(),l=S.bookings.filter(b=>b.date===t&&(b.kits||[]).includes(id));
+  const t=ymd(),nm=nowMin(),l=S.bookings.filter(b=>b.date===t).flatMap(b=>kitRanges(b).filter(x=>x.k===id).map(x=>({team:b.team,room:b.room,start:x.s,end:x.e})));
   const cur=l.find(b=>b.start<=nm&&nm<b.end);
   if(cur)return {cls:"held",t:"예약",w:`${cur.team}조 · ${cur.room}번 ~${fmt(cur.end)}`};
   const nx=l.filter(b=>b.start>nm).sort((a,b)=>a.start-b.start)[0];
