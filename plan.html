@@ -344,6 +344,8 @@ body.member #probList input[readonly]{background:var(--sunk);color:var(--muted);
 .rchip select{width:auto;min-height:28px;padding:1px 4px;border:0;background:transparent;font-weight:800;color:var(--tc);font-size:.92rem}
 .rchip .x{width:22px;height:22px;font-size:.7rem}
 .rarr{color:var(--faint);font-weight:700}
+.tsec .rno{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:6px;background:var(--tc);color:#fff;font-size:.74rem;font-weight:800;vertical-align:1px}
+.tsec .rnth{font-size:.74rem;color:var(--tc);font-weight:700}
 .rpre{display:inline-flex;gap:4px;flex-wrap:wrap;margin-left:auto}
 .rpre .pre{font-size:.72rem;font-weight:700;color:var(--muted);border:1px solid var(--line-strong);border-radius:99px;padding:2px 8px;background:var(--surface)}
 .rpre .pre:hover{color:var(--fg);border-color:var(--fg)}
@@ -612,17 +614,28 @@ function slotSizes(s){const v=parseSizes(S.sizes[s]);return v.length?v.sort((a,b
 const maxSize=()=>{let m=0;for(let s=1;s<=S.slots;s++)m=Math.max(m,...slotSizes(s),0);return m};
 const TYPES=()=>[...new Set(activeProblems().map(p=>p.type))];
 /* 타임마다 {rounds:[진행 순서 형들], set:[문제 id]} */
-function cfgOf(s){S.cfg=S.cfg||{};if(!S.cfg[s]){const pv=S.cfg[s-1]||S.cfg[1];S.cfg[s]=pv?{rounds:pv.rounds.slice(),set:pv.set.slice()}:{rounds:TYPES(),set:[]}}return S.cfg[s]}
+/* 라운드(진행 순서 한 칸)마다 문제 목록 rsets[i] — 같은 형을 두 번 해도 따로. set = 모든 라운드 합친 것 */
+const cpCfg=c=>({rounds:c.rounds.slice(),rsets:(c.rsets||[]).map(x=>x.slice()),set:c.set.slice()});
+function normCfg(c){if(!Array.isArray(c.rsets)||c.rsets.length!==c.rounds.length){const used={};
+    c.rsets=c.rounds.map((t,i)=>{const old=c.rsets&&c.rsets[i];if(old&&old.every(id=>(prob(id)||{}).type===t))return old.slice();const all=c.set.filter(id=>(prob(id)||{}).type===t);return all.slice()})}
+  c.set=[];c.rsets.forEach(r=>r.forEach(id=>{if(!c.set.includes(id))c.set.push(id)}));return c}
+function cfgOf(s){S.cfg=S.cfg||{};if(!S.cfg[s]){const pv=S.cfg[s-1]||S.cfg[1];S.cfg[s]=pv?cpCfg(normCfg(pv)):{rounds:TYPES(),set:[]}}return normCfg(S.cfg[s])}
+const rsetOf=(s,i)=>(cfgOf(s).rsets[i]||[]).filter(id=>prob(id)&&prob(id).active);
 const setOf=(t,s=S.setSlot)=>cfgOf(s).set.filter(id=>(prob(id)||{}).type===t);
 const slotMax=s=>Math.max(0,...slotSizes(s));
 const unionSet=()=>{const o=[];for(let s=1;s<=S.slots;s++)cfgOf(s).set.forEach(id=>{if(!o.includes(id))o.push(id)});return o};
-const cfgForSave=n=>{const o={};for(let s=1;s<=n;s++){const c=cfgOf(s);o[s]={rounds:c.rounds.slice(),set:c.set.slice()}}return o};
+const cfgForSave=n=>{const o={};for(let s=1;s<=n;s++)o[s]=cpCfg(cfgOf(s));return o};
 /* 진행 순서에 있는 형만, 형마다 (조 최대 인원 × 그 형 횟수)문제 — 모자라면 있는 만큼 */
 /* fresh(자동으로 고르기)일 때만 조 인원만큼 채움. 평소엔 조장이 고른 개수 그대로 — 비어 있는 형만 채움 */
-function fillSlotSet(s,fresh){const c=cfgOf(s),k=Math.max(3,slotMax(s)),need={};c.rounds.forEach(t=>need[t]=(need[t]||0)+k);
-  if(fresh){c.set=pickSet(need,[]).filter(id=>need[(prob(id)||{}).type]);return}
-  const keep=c.set.filter(id=>prob(id)&&prob(id).active&&need[prob(id).type]);const miss={};Object.keys(need).forEach(t=>{if(!keep.some(id=>prob(id).type===t))miss[t]=need[t]});
-  c.set=Object.keys(miss).length?pickSet(miss,keep).filter(id=>need[(prob(id)||{}).type]):keep}
+function fillSlotSet(s,fresh){const c=cfgOf(s),K=Math.max(3,slotMax(s));
+  /* 같은 형 라운드끼리는 되도록 다른 문제로 */
+  c.rounds.forEach((t,i)=>{if(!fresh&&c.rsets[i].some(id=>prob(id)&&prob(id).active))return;
+    const cnt=c.rounds.filter(x=>x===t).length,avail=activeProblems().filter(p=>p.type===t).length,k=Math.max(1,Math.min(K,Math.ceil(avail/cnt)));
+    const other=c.rsets.filter((_,j)=>j!==i&&c.rounds[j]===t&&(!fresh||j<i)).flat();
+    let pick=pickSet({[t]:k+other.length},other).filter(id=>(prob(id)||{}).type===t&&!other.includes(id)).slice(0,k);
+    if(pick.length<k)pick=pick.concat(pickSet({[t]:k},pick).filter(id=>(prob(id)||{}).type===t&&!pick.includes(id))).slice(0,k);if(!pick.length)pick=pickSet({[t]:k},[]).filter(id=>(prob(id)||{}).type===t).slice(0,k);c.rsets[i]=pick});
+  normCfg(c)}
+function resetRound(s,i){cfgOf(s).rsets[i]=[];fillSlotSet(s)}
 const roundsOf=gr=>{const m=new Map();gr.slice().sort((a,b)=>a.ord-b.ord).forEach(a=>{const r=Math.floor((a.ord-1)/10);if(!m.has(r))m.set(r,[]);m.get(r).push(a)});
   return [...m.entries()].sort((a,b)=>a[0]-b[0]).map(([r,rows],i)=>({n:i+1,t:(prob(rows[0].problem_id)||{}).type||"?",rows}))};
 
@@ -651,7 +664,7 @@ function generate(only){
       rows.forEach(a=>{(tSolved[a.member_id]=tSolved[a.member_id]||new Set()).add(a.problem_id);for(const o of g)if(o!==a.member_id){(tSeen[o]=tSeen[o]||{});tSeen[o][a.problem_id]=(tSeen[o][a.problem_id]||0)+1}});
       for(let x=0;x<g.length;x++)for(let y=x+1;y<g.length;y++){const k=pk(g[x],g[y]);tPair[k]=(tPair[k]||0)+1}})}
   for(let s=only||1;s<=(only||S.slots);s++){
-    const sizes=slotSizes(s),mn=Math.min(...sizes);const rounds=cfgOf(s).rounds.filter(t=>setOf(t,s).length);
+    const sizes=slotSizes(s),mn=Math.min(...sizes);const RR=cfgOf(s).rounds,rIdx=RR.map((_,i)=>i).filter(i=>rsetOf(s,i).length);
     let best=null;
     for(let it=0;it<1500;it++){const q=shuffle(present.slice());let i=0,cost=Math.random()*.1;const gs=sizes.map(k=>{const g=q.slice(i,i+k);i+=k;return g});
       for(const g of gs){for(let a=0;a<g.length;a++)for(let b=a+1;b<g.length;b++){const k=pk(g[a],g[b]);const c=(T.pair[k]||0)+(tPair[k]||0)*3;cost+=c*c}
@@ -659,9 +672,9 @@ function generate(only){
       if(!best||cost<best.cost)best={cost,gs}}
     best.gs.forEach((g,gi)=>{
       /* 형 순서를 조마다 한 칸씩 밀어서 같은 재료를 동시에 덜 쓰게 */
-      const tt=rounds.map((_,i)=>rounds[(i+gi)%rounds.length]);
-      tt.forEach((t,ti)=>{
-        const set=setOf(t,s);let pool=set.slice();while(pool.length<g.length)pool=pool.concat(set);
+      const tt=rIdx.map((_,i)=>rIdx[(i+gi)%rIdx.length]);
+      tt.forEach((ri,ti)=>{
+        const set=rsetOf(s,ri);let pool=set.slice();while(pool.length<g.length)pool=pool.concat(set);
         let bestA=null;
         for(const sub of combos(pool,g.length))for(const pm of perms(sub)){let c=0;
           g.forEach((m,k)=>{const p=pm[k];c+=((tSolved[m]||new Set()).has(p)?1000:0)+g2(T.solve,m,p)*10+g2(T.fb,m,p)*2+((tSeen[m]||{})[p]||0)+Math.random()*.6});
@@ -725,12 +738,16 @@ function renderMe(){const el=$("meSel");if(!el||!S.D)return;const v=meId();el.in
 
 /* ---------- 오늘 연습 화면 ---------- */
 const grpMembers=rows=>{const seen=[];rows.slice().sort((a,b)=>a.ord-b.ord).forEach(a=>{if(!seen.includes(a.member_id))seen.push(a.member_id)});return seen};
+/* 예전에 저장된 날: 조마다 한 칸씩 민 순서를 되돌려서 라운드별 문제를 모음 */
+function deriveRsets(d,s,rounds){const n=rounds.length,out=rounds.map(()=>[]);const rows=d.assigns.filter(a=>a.slot===s);
+  [...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b).forEach((g,gi)=>{roundsOf(rows.filter(a=>a.grp===g)).forEach((R,r)=>{const bi=(r+gi)%n;if(out[bi])R.rows.forEach(a=>{if(!out[bi].includes(a.problem_id))out[bi].push(a.problem_id)})})});
+  return out.every((x,i)=>x.every(id=>(prob(id)||{}).type===rounds[i]))?out:undefined}
 function loadDate(date){
   if(date!==S.date){S.vslot=1;S.autoErr="";S.autoFail=""}S.date=date;S.open=null;const d=dayOf(date);
   S.setSlot=1;
   if(d){S.savedId=d.id;S.slots=d.slots;S.setIds=d.problem_set.slice();S.draft=d.assigns.map(a=>({...a}));S.dirty=false;
-    S.cfg={};const dc=d.cfg||{};for(let s=1;s<=d.slots;s++){if(dc[s]&&Array.isArray(dc[s].rounds))S.cfg[s]={rounds:dc[s].rounds.slice(),set:(dc[s].set||d.problem_set).slice()};
-      else{const g1=d.assigns.filter(a=>a.slot===s);const gs=[...new Set(g1.map(a=>a.grp))].sort((a,b)=>a-b);const r=roundsOf(g1.filter(a=>a.grp===gs[0])).map(R=>R.t);S.cfg[s]={rounds:r.length?r:TYPES(),set:d.problem_set.slice()}}}
+    S.cfg={};const dc=d.cfg||{};for(let s=1;s<=d.slots;s++){if(dc[s]&&Array.isArray(dc[s].rounds))S.cfg[s]={rounds:dc[s].rounds.slice(),rsets:Array.isArray(dc[s].rsets)?dc[s].rsets.map(x=>x.slice()):deriveRsets(d,s,dc[s].rounds),set:(dc[s].set||d.problem_set).slice()};
+      else{const g1=d.assigns.filter(a=>a.slot===s);const gs=[...new Set(g1.map(a=>a.grp))].sort((a,b)=>a-b);const r=roundsOf(g1.filter(a=>a.grp===gs[0])).map(R=>R.t);S.cfg[s]={rounds:r.length?r:TYPES(),rsets:r.length?deriveRsets(d,s,r):undefined,set:d.problem_set.slice()}}}
     S.present=new Set(d.assigns.map(a=>a.member_id));S.sizes={};
     for(let s=1;s<=d.slots;s++){const rows=d.assigns.filter(a=>a.slot===s);const grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);S.sizes[s]=grps.map(g=>grpMembers(rows.filter(a=>a.grp===g)).length).join(",")}}
   else if(S.role==="member"){S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set();S.setIds=[];S.cfg={}}
@@ -777,23 +794,25 @@ function renderSet(){
     ${c.rounds.length<6?`<button type="button" class="btn sm ghost" data-radd>+ 추가</button>`:""}
     <span class="rpre">${[allT.join(""),"BBC","AAC","ABB"].filter(v=>v.split("").every(x=>allT.includes(x))).filter((v,k,a)=>a.indexOf(v)===k).map(v=>`<button type="button" class="pre" data-rpre="${v}">${v.split("").join("·")}</button>`).join("")}</span>
     ${S.slots>1?`<button type="button" class="linkbtn" data-rcopy>다른 타임도 이렇게</button>`:""}</div>`;
-  h+=ps.length?used.map(t=>{const ids=setOf(t,ss),cnt=c.rounds.filter(x=>x===t).length;
-    return `<div class="tsec" style="${tStyle(t)}"><div style="display:flex;align-items:center;gap:6px"><h3 style="margin-right:auto">${t}형 <span class="hint" style="font-weight:500">${ids.length}문제${cnt>1?` · ${cnt}번 돌림`:""}</span></h3>
-      <button class="btn sm ghost" type="button" data-tdel="${t}" aria-label="${t}형 하나 빼기">−</button><button class="btn sm" type="button" data-tadd="${t}" aria-label="${t}형 하나 추가">+</button></div>
-      ${ids.map(id=>`<select data-si="${c.set.indexOf(id)}" aria-label="${t}형 문제">${opts(t,id)}</select>`).join("")}
+  h+=ps.length?c.rounds.map((t,ri)=>{const ids=c.rsets[ri]||[],dup=c.rounds.filter(x=>x===t).length>1;
+    return `<div class="tsec" style="${tStyle(t)}"><div style="display:flex;align-items:center;gap:6px"><h3 style="margin-right:auto"><span class="rno">${ri+1}</span> ${t}형${dup?` <small class="rnth">(${c.rounds.slice(0,ri+1).filter(x=>x===t).length}번째)</small>`:""} <span class="hint" style="font-weight:500">${ids.length}문제</span></h3>
+      <button class="btn sm ghost" type="button" data-tdel="${ri}" aria-label="${ri+1}번 하나 빼기">−</button><button class="btn sm" type="button" data-tadd="${ri}" aria-label="${ri+1}번 하나 추가">+</button></div>
+      ${ids.map((id,k)=>`<select data-si="${ri}:${k}" aria-label="${ri+1}번 ${t}형 문제">${opts(t,id)}</select>`).join("")}
       ${ids.length&&ids.length<need?`<div class="hint">${need}명 조는 같은 문제를 여러 명이 풀어요 (그대로 써도 돼요)</div>`:""}</div>`}).join("")
     :`<div class="empty">'조원·질환' 탭에서 질환을 먼저 넣어 주세요.</div>`;
   const el=$("setRows");el.innerHTML=h;
   const chg=()=>{markDirty();renderSet()};
   el.querySelectorAll("[data-ss]").forEach(b=>b.onclick=()=>{S.setSlot=Number(b.dataset.ss);renderSet()});
-  el.querySelectorAll("[data-rt]").forEach(x=>x.onchange=()=>{c.rounds[Number(x.dataset.rt)]=x.value;fillSlotSet(ss);chg()});
-  el.querySelectorAll("[data-rx]").forEach(b=>b.onclick=()=>{c.rounds.splice(Number(b.dataset.rx),1);c.set=c.set.filter(id=>c.rounds.includes((prob(id)||{}).type));chg()});
-  const ra=el.querySelector("[data-radd]");if(ra)ra.onclick=()=>{c.rounds.push(c.rounds[c.rounds.length-1]||allT[0]);fillSlotSet(ss);chg()};
-  el.querySelectorAll("[data-rpre]").forEach(b=>b.onclick=()=>{c.rounds=b.dataset.rpre.split("");fillSlotSet(ss);chg()});
-  const rc=el.querySelector("[data-rcopy]");if(rc)rc.onclick=()=>{for(let x=1;x<=S.slots;x++)if(x!==ss)S.cfg[x]={rounds:c.rounds.slice(),set:c.set.slice()};toast(`모든 타임을 ${c.rounds.join("→")} · 같은 세트로 맞췄어요`);chg()};
-  el.querySelectorAll("[data-si]").forEach(x=>x.onchange=()=>{c.set[Number(x.dataset.si)]=x.value;c.set=c.set.filter(Boolean);chg()});
-  el.querySelectorAll("[data-tadd]").forEach(b=>b.onclick=()=>{const t=b.dataset.tadd;const cand=pickSet({[t]:setOf(t,ss).length+1},c.set.filter(id=>prob(id).type===t)).find(id=>!c.set.includes(id));if(!cand){toast(`더 넣을 ${t}형 질환이 없어요`);return}c.set.push(cand);chg()});
-  el.querySelectorAll("[data-tdel]").forEach(b=>b.onclick=()=>{const ids=setOf(b.dataset.tdel,ss);if(!ids.length)return;c.set.splice(c.set.lastIndexOf(ids[ids.length-1]),1);chg()});
+  el.querySelectorAll("[data-rt]").forEach(x=>x.onchange=()=>{const i=Number(x.dataset.rt);c.rounds[i]=x.value;c.rsets[i]=[];fillSlotSet(ss);chg()});
+  el.querySelectorAll("[data-rx]").forEach(b=>b.onclick=()=>{const i=Number(b.dataset.rx);c.rounds.splice(i,1);c.rsets.splice(i,1);normCfg(c);chg()});
+  const ra=el.querySelector("[data-radd]");if(ra)ra.onclick=()=>{c.rounds.push(c.rounds[c.rounds.length-1]||allT[0]);c.rsets.push([]);fillSlotSet(ss);chg()};
+  el.querySelectorAll("[data-rpre]").forEach(b=>b.onclick=()=>{c.rounds=b.dataset.rpre.split("");c.rsets=c.rounds.map(()=>[]);fillSlotSet(ss);chg()});
+  const rc=el.querySelector("[data-rcopy]");if(rc)rc.onclick=()=>{for(let x=1;x<=S.slots;x++)if(x!==ss)S.cfg[x]=cpCfg(c);toast(`모든 타임을 ${c.rounds.join("→")} · 같은 세트로 맞췄어요`);chg()};
+  el.querySelectorAll("[data-si]").forEach(x=>x.onchange=()=>{const [ri,k]=x.dataset.si.split(":").map(Number);c.rsets[ri][k]=x.value;c.rsets[ri]=c.rsets[ri].filter(Boolean);normCfg(c);chg()});
+  el.querySelectorAll("[data-tadd]").forEach(b=>b.onclick=()=>{const ri=Number(b.dataset.tadd),t=c.rounds[ri],cur=c.rsets[ri];const other=c.rsets.filter((_,j)=>j!==ri&&c.rounds[j]===t).flat();
+    const cand=pickSet({[t]:cur.length+other.length+1},[...cur,...other]).find(id=>(prob(id)||{}).type===t&&!cur.includes(id)&&!other.includes(id))||activeProblems().find(p=>p.type===t&&!cur.includes(p.id))?.id;
+    if(!cand){toast(`더 넣을 ${t}형 질환이 없어요`);return}cur.push(cand);normCfg(c);chg()});
+  el.querySelectorAll("[data-tdel]").forEach(b=>b.onclick=()=>{const ri=Number(b.dataset.tdel);if(!c.rsets[ri].length)return;c.rsets[ri].pop();normCfg(c);chg()});
   $("genBtn").textContent=S.draft?"🎲 다시 짜기":"🎲 조 · 문제 짜기"}
 /* 형 하나에 질환 하나 더(덜 해 본 순) */
 function markDirty(){if(S.draft)S.dirty=true;renderStatus()}
