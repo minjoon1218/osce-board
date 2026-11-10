@@ -191,6 +191,31 @@ body.member .ptabs{grid-template-columns:repeat(3,1fr)}
 .rel{grid-column:2/-1;font-size:.74rem;color:var(--muted);line-height:1.4;margin-top:-2px}
 .rel::before{content:"관련 ";font-weight:700;color:var(--faint)}
 .prel{grid-column:1/-1;width:100%;font:inherit;font-size:.8rem;line-height:1.5;padding:6px 8px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical}
+/* 피드백 (댓글처럼 쌓임) */
+.fbt{grid-column:2/-1;display:grid;gap:6px;margin:2px 0 4px}
+.fbb{background:var(--sunk);border-radius:10px;padding:7px 10px 8px;border-left:3px solid var(--accent)}
+.fbb .fbh{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;margin-bottom:2px}
+.fbb .fbh b{font-size:.8rem}
+.fbb .fbh small{font-size:.7rem;color:var(--faint);font-family:var(--t-mono)}
+.fbb .fbh .acts{margin-left:auto;display:flex;gap:2px}
+.fbb .fbh .acts button{font-size:.7rem;color:var(--muted);padding:1px 6px;border-radius:6px}
+.fbb .fbh .acts button:hover{background:var(--surface);color:var(--fg)}
+.fbx{font-size:.9rem;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.fbplus{justify-self:start;font-size:.78rem;color:var(--accent-ink);font-weight:700;padding:3px 10px;border-radius:99px;border:1px dashed var(--accent);background:transparent}
+.fbplus:hover{background:var(--accent-soft)}
+.fbadd{display:grid;gap:5px}
+.fbadd textarea,.fbb textarea{width:100%;min-height:58px;resize:vertical;border:1px solid var(--line-strong);border-radius:9px;padding:7px 9px;font:inherit;font-size:.88rem;background:var(--surface);color:var(--fg)}
+.fbadd textarea:focus,.fbb textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.fbadd .row{display:flex;gap:6px;align-items:center;justify-content:flex-end;font-size:.76rem;color:var(--muted)}
+.fbadd .row span{margin-right:auto}
+.fbc{display:inline-block;font-size:.7rem;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);border-radius:99px;padding:0 6px;margin-left:4px;vertical-align:1px}
+.sess{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--surface);display:grid;gap:4px}
+.sess+.sess{margin-top:8px}
+.sess-h{display:flex;align-items:center;gap:6px}
+.sess-h small{font-family:var(--t-mono);color:var(--muted);margin-right:auto}
+.sess .fbt{grid-column:auto}
+.me{display:inline-flex;align-items:center;gap:5px;font-size:.84rem;color:var(--muted)}
+.me select{width:auto;padding:4px 8px;min-height:32px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.86rem;font-weight:500;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 @media (max-width:440px){.brand h1{display:none}}
@@ -227,6 +252,7 @@ body.member .ptabs{grid-template-columns:repeat(3,1fr)}
     <div class="toprow">
       <span class="unitname" id="unitName"></span>
       <select id="unitSel" hidden aria-label="묶음 고르기"></select>
+      <label class="me" title="피드백에 내 이름이 붙어요">나 <select id="meSel" aria-label="내 이름"></select></label>
       <button class="btn sm ghost" type="button" id="reload">↻ 새로고침</button>
       <div class="ptabs" role="tablist">
         <button type="button" role="tab" data-tab="today" aria-selected="true">오늘 연습</button>
@@ -346,7 +372,7 @@ const demo={
       d={members:ms,problems:ps,days:[]}}
     return d},
   save(d){store("osce-prac-demo",JSON.stringify(d))},
-  out(d){return {unit:"DEMO",teams:["C"],role:S.role==="member"?"member":"leader",member_code:S.role==="member"?null:"DEMO-M",members:d.members,problems:d.problems,days:d.days,logs:d.logs||[]}}
+  out(d){return {unit:"DEMO",teams:["C"],role:S.role==="member"?"member":"leader",member_code:S.role==="member"?null:"DEMO-M",members:d.members,problems:d.problems,days:d.days,logs:d.logs||[],fbs:d.fbs||[]}}
 };
 const api={
   async login(code){if(!LIVE){const u=String(code).trim().toUpperCase();if(u==="DEMO-ADMIN")return {role:"admin",team:null};if(u==="DEMO-M")return {role:"member",team:null,unit:"DEMO"};const m=u.match(/^DEMO-([A-H])$/);return m?{role:"leader",team:m[1]}:null}
@@ -372,6 +398,12 @@ const api={
     return await rpc("prac_add_log",{p_code:S.code,p_unit:unitArg(),p_date:date,p_member:member,p_problem:problem,p_feedback:fb,p_observers:obs})},
   async editLog(id,fb){if(!LIVE){const d=demo.db();(d.logs||[]).forEach(l=>{if(l.id===id)l.feedback=fb});demo.save(d);return true}
     return await rpc("prac_edit_log",{p_code:S.code,p_unit:unitArg(),p_id:id,p_feedback:fb})},
+  async fbAdd(q,author,text){if(!LIVE){const d=demo.db();d.fbs=d.fbs||[];const f={id:"f"+Date.now()+Math.random().toString(36).slice(2,5),day_id:q.day||null,slot:q.day?q.slot:null,log_id:q.log||null,member_id:q.member,problem_id:q.problem,author_id:author||null,text,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};d.fbs.push(f);demo.save(d);return f}
+    return await rpc("prac_fb_add",{p_code:S.code,p_unit:unitArg(),p_day:q.day||null,p_slot:q.day?q.slot:null,p_log:q.log||null,p_member:q.member,p_problem:q.problem,p_author:author||null,p_text:text})},
+  async fbEdit(id,text){if(!LIVE){const d=demo.db();(d.fbs||[]).forEach(f=>{if(f.id===id){f.text=text;f.updated_at=new Date().toISOString()}});demo.save(d);return true}
+    return await rpc("prac_fb_edit",{p_code:S.code,p_unit:unitArg(),p_id:id,p_text:text})},
+  async fbDel(id){if(!LIVE){const d=demo.db();d.fbs=(d.fbs||[]).filter(f=>f.id!==id);demo.save(d);return true}
+    return await rpc("prac_fb_del",{p_code:S.code,p_unit:unitArg(),p_id:id})},
   async delLog(id){if(!LIVE){const d=demo.db();d.logs=(d.logs||[]).filter(l=>l.id!==id);demo.save(d);return true}
     return await rpc("prac_delete_log",{p_code:S.code,p_unit:unitArg(),p_id:id})},
   async delDay(dayId){if(!LIVE){const d=demo.db();d.days=d.days.filter(x=>x.id!==dayId);demo.save(d);return true}
@@ -379,6 +411,7 @@ const api={
   async bookings(date,teams){if(!LIVE)return [];try{const {data}=await sb.from("bookings").select("room,start_min,end_min,team").eq("date",date).in("team",teams).order("start_min");return data||[]}catch(e){return []}}
 };
 function errText(e){const m=String(e&&e.message||e);
+  if(m.includes("EMPTY"))return "내용을 적어 주세요.";
   if(m.includes("PRAC_CLOSED"))return "연습 플랜은 지금 3일차만 쓸 수 있어요.";
   if(m.includes("NOT_LEADER"))return S.role==="member"?"조장 코드로만 할 수 있어요.":"코드가 맞지 않아요.";
   if(m.includes("BAD_TEAM"))return "묶음을 골라 주세요.";
@@ -471,6 +504,35 @@ function generate(){
     })}
   return out}
 
+/* ---------- 피드백: 댓글처럼 한 건씩 ---------- */
+const FBQ={};
+const fbKey=q=>q.log?"l:"+q.log:`a:${q.day}:${q.slot}:${q.member}:${q.problem}`;
+const fbOf=q=>(S.D.fbs||[]).filter(f=>q.log?f.log_id===q.log:(f.day_id===q.day&&f.slot===q.slot&&f.member_id===q.member&&f.problem_id===q.problem));
+const fbWhen=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`};
+const meKey=()=>"osce-prac-me-"+(S.D&&S.D.unit||"");
+const meId=()=>{const v=store(meKey());return v&&mem(v)?v:""};
+function fbThread(q,ph){const key=fbKey(q);FBQ[key]=q;const list=fbOf(q),open=S.fbOpen===key;
+  return `<div class="fbt">${list.map(f=>S.fbEdit===f.id?`<div class="fbb"><textarea data-fbetext="${f.id}" aria-label="피드백 고치기">${esc(f.text)}</textarea>
+      <div class="fbadd"><div class="row"><button class="btn sm ghost" type="button" data-fbecancel>취소</button><button class="btn sm primary" type="button" data-fbesave="${f.id}">저장</button></div></div></div>`
+    :`<div class="fbb"><div class="fbh"><b>${esc((mem(f.author_id)||{}).name||"익명")}</b><small>${fbWhen(f.created_at)}${f.updated_at&&f.updated_at!==f.created_at&&new Date(f.updated_at)-new Date(f.created_at)>60000?" · 고침":""}</small>
+      <span class="acts"><button type="button" data-fbedit="${f.id}">고치기</button><button type="button" data-fbdel="${f.id}">지우기</button></span></div><div class="fbx">${esc(f.text)}</div></div>`).join("")}
+    ${open?`<div class="fbadd"><textarea data-fbtext="${key}" placeholder="${esc(ph||"피드백")}" aria-label="피드백 쓰기"></textarea>
+      <div class="row"><span>${meId()?`${esc(mem(meId()).name)} 이름으로 저장돼요`:"위쪽 '나'에서 이름을 고르면 이름이 붙어요 (안 고르면 익명)"}</span><button class="btn sm ghost" type="button" data-fbcancel>취소</button><button class="btn sm primary" type="button" data-fbadd="${key}">추가</button></div></div>`
+    :`<button class="fbplus" type="button" data-fbopen="${key}">+ 피드백${list.length?" 더 쓰기":" 쓰기"}</button>`}</div>`}
+function rerenderFb(){if(S.tab==="today")renderResult();else if(S.tab==="stats")renderStats()}
+document.addEventListener("click",async e=>{const t=e.target.closest("[data-fbopen],[data-fbcancel],[data-fbadd],[data-fbedit],[data-fbdel],[data-fbesave],[data-fbecancel]");if(!t)return;
+  if(t.dataset.fbopen){S.fbOpen=t.dataset.fbopen;S.fbEdit=null;rerenderFb();const ta=document.querySelector(`[data-fbtext="${CSS.escape(S.fbOpen)}"]`);if(ta)ta.focus();return}
+  if(t.hasAttribute("data-fbcancel")){S.fbOpen=null;rerenderFb();return}
+  if(t.hasAttribute("data-fbecancel")){S.fbEdit=null;rerenderFb();return}
+  if(t.dataset.fbadd){const key=t.dataset.fbadd,ta=document.querySelector(`[data-fbtext="${CSS.escape(key)}"]`),txt=(ta&&ta.value||"").trim();if(!txt){toast("내용을 적어 주세요");return}
+    t.disabled=true;try{const f=await api.fbAdd(FBQ[key],meId(),txt);S.D.fbs.push(f);S.fbOpen=null;rerenderFb();toast("피드백을 추가했어요")}catch(err){t.disabled=false;toast(errText(err))}return}
+  if(t.dataset.fbedit){S.fbEdit=t.dataset.fbedit;S.fbOpen=null;rerenderFb();return}
+  if(t.dataset.fbesave){const id=t.dataset.fbesave,ta=document.querySelector(`[data-fbetext="${CSS.escape(id)}"]`),txt=(ta&&ta.value||"").trim();if(!txt){toast("내용을 적어 주세요");return}
+    try{await api.fbEdit(id,txt);const f=S.D.fbs.find(x=>x.id===id);if(f){f.text=txt;f.updated_at=new Date().toISOString()}S.fbEdit=null;rerenderFb();toast("고쳤어요")}catch(err){toast(errText(err))}return}
+  if(t.dataset.fbdel){if(!confirm("이 피드백을 지울까요?"))return;try{await api.fbDel(t.dataset.fbdel);S.D.fbs=S.D.fbs.filter(x=>x.id!==t.dataset.fbdel);rerenderFb();toast("지웠어요")}catch(err){toast(errText(err))}}});
+function renderMe(){const el=$("meSel");if(!el||!S.D)return;const v=meId();el.innerHTML=`<option value="">이름 고르기</option>`+activeMembers().map(m=>`<option value="${m.id}" ${m.id===v?"selected":""}>${esc(m.name)}</option>`).join("");
+  el.onchange=()=>{store(meKey(),el.value||null);rerenderFb();toast(el.value?`${mem(el.value).name} 이름으로 피드백이 저장돼요`:"이름 없이 저장돼요")}}
+
 /* ---------- 오늘 연습 화면 ---------- */
 const grpMembers=rows=>{const seen=[];rows.slice().sort((a,b)=>a.ord-b.ord).forEach(a=>{if(!seen.includes(a.member_id))seen.push(a.member_id)});return seen};
 function loadDate(date){
@@ -543,7 +605,7 @@ function renderResult(){
         for(const a of gr.filter(x=>((prob(x.problem_id)||{}).type||"?")===t)){const i=S.draft.indexOf(a);
           h+=`<div class="arow"><i></i><span class="atxt">${esc((mem(a.member_id)||{}).name||"?")}</span>`+(RO?`<span class="atxt">${pbadge(prob(a.problem_id))}</span>`:`<select data-ap="${i}" aria-label="${esc((mem(a.member_id)||{}).name||"")} ${t}형 문제">${pOpts(t,a.problem_id)}</select>`);
           {const pr=prob(a.problem_id);if(pr&&pr.related)h+=`<div class="rel">${esc(relShort(pr.related))}</div>`}
-          if(saved&&a.id)h+=`<div class="fb"><textarea data-fb="${a.id}" placeholder="${esc((mem(a.member_id)||{}).name||"")} · ${esc(pcode(prob(a.problem_id)))} 피드백" aria-label="피드백">${esc(a.feedback||"")}</textarea><span class="fbm" data-fbm="${a.id}"></span></div>`;
+          if(saved&&day)h+=fbThread({day:day.id,slot:a.slot,member:a.member_id,problem:a.problem_id},`${(mem(a.member_id)||{}).name||""} · ${pcode(prob(a.problem_id))} 피드백`);
           h+=`</div>`}}
       h+=`</div>`}
     h+=`</div></div>`}
@@ -557,9 +619,7 @@ function renderResult(){
   el.querySelectorAll("[data-ap]").forEach(sel=>sel.onchange=()=>{const a=S.draft[Number(sel.dataset.ap)];
     if(sel.value==="__other"){const ps=activeProblems();const pick=prompt("질환 번호를 적어 주세요 (예: a4, b2)\n"+ps.map(pcode).join(" "));const p=pick&&ps.find(x=>pcode(x)===pick.trim().toLowerCase());if(p)a.problem_id=p.id;else if(pick)toast("그 번호의 질환이 없어요")}
     else a.problem_id=sel.value;markDirty();renderResult()});
-  el.querySelectorAll("[data-fb]").forEach(t=>{let last=t.value;const go=async()=>{if(t.value===last)return;const m=el.querySelector(`[data-fbm="${t.dataset.fb}"]`);m.className="fbm";m.textContent="저장 중…";
-    try{await api.feedback(t.dataset.fb,t.value);last=t.value;const a=day.assigns.find(x=>x.id===t.dataset.fb);if(a)a.feedback=t.value;const d2=S.draft.find(x=>x.id===t.dataset.fb);if(d2)d2.feedback=t.value;m.className="fbm ok";m.textContent="저장됨"}catch(e){m.className="fbm";m.textContent=errText(e)}};
-    t.onblur=go;let tm;t.oninput=()=>{clearTimeout(tm);tm=setTimeout(go,1500)}});
+
   el.querySelectorAll("[data-skip]").forEach(c=>c.onchange=async()=>{try{await api.skip(day.id,Number(c.dataset.skip),c.checked);day.skipped=c.checked?[...new Set([...(day.skipped||[]),Number(c.dataset.skip)])]:(day.skipped||[]).filter(x=>x!==Number(c.dataset.skip));renderResult();toast(c.checked?"이 타임은 기록에서 빠져요":"다시 기록에 넣었어요")}catch(e){toast(errText(e))}});
   const dd=$("delDay");if(dd)dd.onclick=async()=>{if(!confirm(`${md(S.date)} 조 편성과 피드백을 지울까요?`))return;try{await api.delDay(S.savedId);await reload();loadDate(S.date);toast("지웠어요")}catch(e){toast(errText(e))}}}
 const skipNote=d=>d&&(d.skipped||[]).length?`<div class="hint">${d.skipped.join("·")}타임은 '안 함'으로 표시돼 기록에서 빠져요.</div>`:"";
@@ -574,7 +634,7 @@ async function saveDay(){const v=validate();if(v){toast(v);return}
   for(let s=1;s<=S.slots;s++){const rows=S.draft.filter(a=>a.slot===s);const k=rows.map(a=>a.member_id+"|"+(prob(a.problem_id)||{}).type);if(k.length!==new Set(k).size){toast(`${s}타임에 같은 사람이 같은 형을 두 번 풀어요`);return}
     const byM={};rows.forEach(a=>(byM[a.member_id]=byM[a.member_id]||new Set()).add(a.grp));if(Object.values(byM).some(x=>x.size>1)){toast(`${s}타임에 한 사람이 두 조에 있어요`);return}}
   const slots=Math.max(...S.draft.map(a=>a.slot));
-  try{S.D=await api.saveDay(S.date,slots,S.setIds,S.draft.map(a=>({slot:a.slot,grp:a.grp,ord:a.ord,member_id:a.member_id,problem_id:a.problem_id})));S.D.logs=S.D.logs||[];loadDate(S.date);toast("저장했어요 · 피드백 칸이 열렸어요")}catch(e){toast(errText(e))}}
+  try{S.D=await api.saveDay(S.date,slots,S.setIds,S.draft.map(a=>({slot:a.slot,grp:a.grp,ord:a.ord,member_id:a.member_id,problem_id:a.problem_id})));normD();loadDate(S.date);toast("저장했어요 · 피드백 칸이 열렸어요")}catch(e){toast(errText(e))}}
 /* 공유용: 화면에 보이는 편성(저장 전이어도) 기준 */
 function planData(){const day=dayOf(S.date);const skipped=S.savedId&&!S.dirty&&day?(day.skipped||[]):[];
   const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort().filter(s=>!skipped.includes(s)).map(s=>{const rows=S.draft.filter(a=>a.slot===s);
@@ -640,30 +700,31 @@ function renderStats(){
   $("memChips").innerHTML=ms.map(m=>`<button type="button" class="chip sm" data-mc="${m.id}" aria-pressed="${m.id===S.sel}">${esc(m.name)}</button>`).join("");
   $("memChips").querySelectorAll("[data-mc]").forEach(b=>b.onclick=()=>{S.sel=b.dataset.mc;S.open=null;renderStats()});
   if(S.sel){const id=S.sel;
-    const fbs=pid=>S.D.days.filter(d=>d.date<=ymd()).flatMap(d=>d.assigns.filter(a=>a.member_id===id&&a.problem_id===pid&&!(d.skipped||[]).includes(a.slot)).map(a=>({kind:"a",id:a.id,date:d.date,slot:a.slot,fb:a.feedback})))
-      .concat((S.D.logs||[]).filter(l=>l.member_id===id&&l.problem_id===pid&&l.date<=ymd()).map(l=>({kind:"l",id:l.id,date:l.date,fb:l.feedback,obs:l.observers||[]}))).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+    const fbs=pid=>S.D.days.filter(d=>d.date<=ymd()).flatMap(d=>d.assigns.filter(a=>a.member_id===id&&a.problem_id===pid&&!(d.skipped||[]).includes(a.slot)).map(a=>({kind:"a",id:a.id,date:d.date,slot:a.slot,q:{day:d.id,slot:a.slot,member:id,problem:pid}})))
+      .concat((S.D.logs||[]).filter(l=>l.member_id===id&&l.problem_id===pid&&l.date<=ymd()).map(l=>({kind:"l",id:l.id,date:l.date,obs:l.observers||[],q:{log:l.id,member:id,problem:pid}}))).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+    const fbCount=pid=>(S.D.fbs||[]).filter(f=>f.member_id===id&&f.problem_id===pid).length;
     const ps2=activeProblems(),others=activeMembers().filter(m=>m.id!==id);
     const AL=S.addLog&&S.addLog.member===id?S.addLog:(S.addLog={member:id,date:ymd(),problem:S.open||"",obs:new Set(),fb:""});
     let h=`<div class="addlog"><b style="font-size:.86rem">+ ${esc((mem(id)||{}).name||"")} 기록 추가 <span class="hint" style="font-weight:500">(조 짜기 없이 한 연습)</span></b>
       <div class="two"><input type="date" id="alDate" value="${AL.date}" aria-label="날짜"><select id="alProb" aria-label="질환"><option value="">— 질환 —</option>${["A","B","C","D"].filter(t=>ps2.some(p=>p.type===t)).map(t=>`<optgroup label="${t}형">${ps2.filter(p=>p.type===t).map(p=>`<option value="${p.id}" ${p.id===AL.problem?"selected":""}>${esc(plabel(p))}</option>`).join("")}</optgroup>`).join("")}</select></div>
       ${others.length?`<div class="field"><span>같이 보고 피드백한 사람 (있으면)</span><div class="chips">${others.map(m=>`<button type="button" class="chip sm" data-alo="${m.id}" aria-pressed="${AL.obs.has(m.id)}">${esc(m.name)}</button>`).join("")}</div></div>`:""}
-      <textarea id="alFb" placeholder="피드백" aria-label="피드백">${esc(AL.fb)}</textarea>
+      <textarea id="alFb" placeholder="피드백 (선택 · 나중에 더 달 수 있어요)" aria-label="피드백">${esc(AL.fb)}</textarea>
       <button class="btn primary sm" type="button" id="alGo">기록 저장</button></div>
       <table class="stbl"><thead><tr><th>질환</th><th>직접</th><th>피드백</th><th>마지막으로 푼 날</th></tr></thead><tbody>`;
     for(const p of ps){const s=g2(T.solve,id,p.id),f=g2(T.fb,id,p.id),last=(T.last[id]||{})[p.id];
-      h+=`<tr class="click ${s?"":"zero"} ${S.open===p.id?"open":""}" data-op="${p.id}"><td class="nm">${pbadge(p)}</td><td>${s||"0"}</td><td>${f}</td><td class="mono">${last?md(last):"–"}</td></tr>`;
-      if(S.open===p.id){const l=fbs(p.id);h+=`<tr><td colspan="4" class="fbl">${p.related?`<div class="hint" style="margin-bottom:6px"><b>관련 케이스</b> ${esc(relShort(p.related))}</div>`:""}${l.length?l.map(x=>`<div class="fbitem"><div class="fbh"><small>${md(x.date)}${x.kind==="a"?` ${x.slot}타임`:""}</small><span class="kind">${x.kind==="a"?"조 짜기":"직접 추가"}</span>${x.kind==="l"?`<button class="x" type="button" data-ldel="${x.id}" aria-label="이 기록 지우기">✕</button>`:""}</div>
+      h+=`<tr class="click ${s?"":"zero"} ${S.open===p.id?"open":""}" data-op="${p.id}"><td class="nm">${pbadge(p)}${fbCount(p.id)?`<span class="fbc">💬 ${fbCount(p.id)}</span>`:""}</td><td>${s||"0"}</td><td>${f}</td><td class="mono">${last?md(last):"–"}</td></tr>`;
+      if(S.open===p.id){const l=fbs(p.id);h+=`<tr><td colspan="4" class="fbl">${p.related?`<div class="hint" style="margin-bottom:6px"><b>관련 케이스</b> ${esc(relShort(p.related))}</div>`:""}${l.length?l.slice().reverse().map(x=>`<div class="sess"><div class="sess-h"><small>${md(x.date)}${x.kind==="a"?` ${x.slot}타임`:""}</small><span class="kind">${x.kind==="a"?"조 짜기":"직접 추가"}</span>${x.kind==="l"?`<button class="x" type="button" data-ldel="${x.id}" aria-label="이 기록 지우기">✕</button>`:""}</div>
         ${x.kind==="l"&&x.obs.length?`<div class="hint">같이 본 사람: ${x.obs.map(o=>esc((mem(o)||{}).name||"?")).join(", ")}</div>`:""}
-        <textarea data-efb="${x.kind}:${x.id}" placeholder="피드백 적기" aria-label="피드백">${esc(x.fb||"")}</textarea><span class="fbm hint" data-efm="${x.id}"></span></div>`).join(""):`<span class="hint">아직 직접 푼 적이 없어요. 위 '기록 추가'로 넣을 수 있어요.</span>`}</td></tr>`}}
+        ${fbThread(x.q,"피드백 적기")}</div>`).join(""):`<span class="hint">아직 직접 푼 적이 없어요. 위 '기록 추가'로 넣을 수 있어요.</span>`}</td></tr>`}}
     h+=`</tbody></table>`;$("memTbl").innerHTML=ps.length?h:`<div class="empty">질환이 없어요.</div>`;
     $("memTbl").querySelectorAll("[data-op]").forEach(r=>r.onclick=()=>{S.open=S.open===r.dataset.op?null:r.dataset.op;if(S.open&&S.addLog&&!S.addLog.fb)S.addLog.problem=S.open;renderStats()});
     const ad=$("alDate"),ap=$("alProb"),af=$("alFb");if(ad){ad.onchange=()=>AL.date=ad.value;ap.onchange=()=>AL.problem=ap.value;af.oninput=()=>AL.fb=af.value;
       $("memTbl").querySelectorAll("[data-alo]").forEach(b=>b.onclick=()=>{const o=b.dataset.alo;AL.obs.has(o)?AL.obs.delete(o):AL.obs.add(o);b.setAttribute("aria-pressed",String(AL.obs.has(o)))});
       $("alGo").onclick=async()=>{if(!AL.date){toast("날짜를 골라 주세요");return}if(!AL.problem){toast("질환을 골라 주세요");return}
-        try{S.D=await api.addLog(AL.date,id,AL.problem,AL.fb.trim(),[...AL.obs]);S.D.days.forEach(d=>{d.assigns=d.assigns||[];d.skipped=d.skipped||[]});S.D.logs=S.D.logs||[];S.open=AL.problem;S.addLog=null;renderStats();toast(AL.date>ymd()?"저장했어요 · 날짜가 지나면 기록에 세요":"기록 저장했어요")}catch(e){toast(errText(e))}}}
-    $("memTbl").querySelectorAll("[data-efb]").forEach(t=>{let last=t.value;const [kind,eid]=t.dataset.efb.split(":");const go=async()=>{if(t.value===last)return;const m=$("memTbl").querySelector(`[data-efm="${eid}"]`);m.textContent="저장 중…";
-      try{if(kind==="a"){await api.feedback(eid,t.value);for(const d of S.D.days)for(const a of d.assigns)if(a.id===eid)a.feedback=t.value}else{await api.editLog(eid,t.value);(S.D.logs||[]).forEach(l=>{if(l.id===eid)l.feedback=t.value})}last=t.value;m.textContent="저장됨"}catch(e){m.textContent=errText(e)}};
-      t.onblur=go;let tm;t.oninput=()=>{clearTimeout(tm);tm=setTimeout(go,1500)}});
+        try{const before=new Set((S.D.logs||[]).map(l=>l.id));S.D=await api.addLog(AL.date,id,AL.problem,"",[...AL.obs]);normD();
+          const nl=S.D.logs.filter(l=>!before.has(l.id)&&l.member_id===id&&l.problem_id===AL.problem).pop();
+          if(nl&&AL.fb.trim()){const f=await api.fbAdd({log:nl.id,member:id,problem:AL.problem},meId(),AL.fb.trim());S.D.fbs.push(f)}S.open=AL.problem;S.addLog=null;renderStats();toast(AL.date>ymd()?"저장했어요 · 날짜가 지나면 기록에 세요":"기록 저장했어요")}catch(e){toast(errText(e))}}}
+
     $("memTbl").querySelectorAll("[data-ldel]").forEach(b=>b.onclick=async()=>{if(!confirm("이 기록을 지울까요?"))return;try{await api.delLog(b.dataset.ldel);S.D.logs=S.D.logs.filter(l=>l.id!==b.dataset.ldel);renderStats();toast("지웠어요")}catch(e){toast(errText(e))}})}
   else $("memTbl").innerHTML="";
   const act=ps.filter(p=>p.active);
@@ -693,11 +754,11 @@ $("memNew").onkeydown=e=>{if(e.key==="Enter"&&!e.isComposing&&e.keyCode!==229){e
 $("memSave").onclick=async()=>{const m=$("memMsg");const items=MEM.map((x,i)=>({id:x.id,name:String(x.name||"").trim(),active:x.active!==false,sort:i}));
   if(items.some(x=>!x.name)){m.className="msg err";m.textContent="빈 이름이 있어요.";return}
   if(new Set(items.map(x=>x.name)).size!==items.length){m.className="msg err";m.textContent="같은 이름이 두 번 있어요. 성까지 써 주세요.";return}
-  try{S.D=await api.saveMembers(items);setupInit();m.className="msg";m.textContent="저장했어요";toast("조원 저장했어요");if(!S.savedId)S.present=new Set(activeMembers().map(x=>x.id))}catch(e){m.className="msg err";m.textContent=errText(e)}};
+  try{S.D=await api.saveMembers(items);normD();setupInit();m.className="msg";m.textContent="저장했어요";toast("조원 저장했어요");if(!S.savedId)S.present=new Set(activeMembers().map(x=>x.id))}catch(e){m.className="msg err";m.textContent=errText(e)}};
 $("probSave").onclick=async()=>{const m=$("probMsg");const items=PROB.map(p=>({id:p.id,type:p.type,no:Number(p.no),name:String(p.name||"").trim(),related:String(p.related||"").trim(),active:true}));
   if(items.some(p=>!(p.no>=1&&p.no<=49))){m.className="msg err";m.textContent="번호는 1–49로 적어 주세요.";return}
   const keys=items.map(p=>p.type+p.no);if(new Set(keys).size!==keys.length){m.className="msg err";m.textContent=`같은 번호가 두 번 있어요: ${keys.filter((k,i)=>keys.indexOf(k)!==i).join(", ")}`;return}
-  try{S.D=await api.saveProblems(items);setupInit();m.className="msg";m.textContent="저장했어요";toast("질환 저장했어요")}catch(e){m.className="msg err";m.textContent=errText(e)}};
+  try{S.D=await api.saveProblems(items);normD();setupInit();m.className="msg";m.textContent="저장했어요";toast("질환 저장했어요")}catch(e){m.className="msg err";m.textContent=errText(e)}};
 $("bulkGo").onclick=()=>{let n=0,bad=[];for(const line of $("bulkIn").value.split("\n")){const s=line.trim();if(!s)continue;const x=s.match(/^([A-Da-d])\s*[-.]?\s*(\d{1,2})[.)]?\s*(.*)$/);
     if(!x){bad.push(s);continue}const t=x[1].toUpperCase(),no=Number(x[2]),name=x[3].trim();const ex=PROB.find(p=>p.type===t&&p.no===no);if(ex)ex.name=name||ex.name;else PROB.push({id:null,type:t,no,name,active:true});n++}
   renderSetup();$("probMsg").className=bad.length?"msg err":"msg";$("probMsg").textContent=`${n}개 넣었어요${bad.length?` · 못 읽은 줄: ${bad.slice(0,3).join(" / ")}`:""} · 저장을 눌러야 반영돼요`;if(!bad.length)$("bulkIn").value=""};
@@ -713,7 +774,8 @@ document.querySelectorAll(".ptabs [data-tab]").forEach(b=>b.onclick=()=>setTab(b
 $("dateIn").onchange=()=>{if(!$("dateIn").value)return;if(!confirmLeave()){$("dateIn").value=S.date;return}loadDate($("dateIn").value)};
 $("setAuto").onclick=()=>{S.setIds=pickSet(Math.max(3,maxSize()));markDirty();renderSet()};
 $("genBtn").onclick=doGenerate;
-async function reload(){S.D=await api.load();S.D.days.forEach(d=>{d.assigns=d.assigns||[];d.skipped=d.skipped||[]});S.D.logs=S.D.logs||[]}
+function normD(){S.D.days.forEach(d=>{d.assigns=d.assigns||[];d.skipped=d.skipped||[]});S.D.logs=S.D.logs||[];S.D.fbs=S.D.fbs||[];renderMe()}
+async function reload(){S.D=await api.load();normD()}
 $("reload").onclick=async()=>{if(!confirmLeave())return;try{await reload();if(S.tab==="today")loadDate(S.date);else setTab(S.tab);toast("새로 불러왔어요")}catch(e){toast(errText(e))}};
 document.addEventListener("visibilitychange",async()=>{if(document.visibilityState!=="visible"||!S.D||(S.draft&&S.dirty))return;try{await reload();if(S.tab==="today"){const keep=S.date;loadDate(keep)}else if(S.tab==="stats")renderStats()}catch(e){}});
 window.addEventListener("beforeunload",e=>{if(S.draft&&S.dirty){e.preventDefault();e.returnValue=""}});
@@ -734,7 +796,7 @@ async function enter(){
 async function start(){
   try{await reload()}catch(e){if(String(e.message).includes("PRAC_CLOSED")){store("osce-plan-ok",null);$("closed").hidden=false;$("app").hidden=true;return}toast(errText(e));$("app").hidden=true;return}
   $("closed").hidden=true;$("app").hidden=false;store("osce-plan-ok","1");
-  if(S.D.role==="member")S.role="member";document.body.classList.toggle("member",S.role==="member");renderMcode();
+  if(S.D.role==="member")S.role="member";document.body.classList.toggle("member",S.role==="member");renderMcode();renderMe();
   $("unitName").textContent=`${S.D.unit==="DEMO"?"데모":S.D.unit} ${(S.D.teams||[]).length>1?`(${S.D.teams.join("·")}조 함께)`:"조"} 연습`;
   if(S.role!=="member"&&(!S.D.members.length||!S.D.problems.length))setTab("setup");else{setTab("today");loadDate(S.date)}}
 function renderMcode(){const el=$("mcode");if(S.role==="member"||!S.D.member_code){el.hidden=true;return}el.hidden=false;
