@@ -500,7 +500,12 @@ const relShort=t=>{const g={},other=[];String(t||"").split(/\n|\s·\s/).map(x=>x
   if(m){(g[m[1]]=g[m[1]]||[]).push(m[2]+(/감별/.test(x)?"(감별)":""))}else{const h=x.match(/^#\s?(\d+)/);other.push(h?`#${h[1]}`:x.replace(/\s*\(.*\)\s*$/,""))}});
   return [...["초진","두근두근"].filter(k=>g[k]).map(k=>`${k} ${[...new Set(g[k])].join("·")}`),...other].join(" / ")};
 /* 관련 케이스 중 하나를 고정 무작위로 (같은 날·사람·문제면 늘 같은 번호) — 감별 케이스는 뺌 */
-const relCases=t=>[...new Set(String(t||"").split(/\n|\s·\s/).map(x=>x.trim()).filter(x=>x&&!/감별/.test(x)).map(x=>{const m=x.match(/^(초진|두근두근)\s*#?(\d+)/);return m?`${m[1]} ${m[2]}`:""}).filter(Boolean))];
+/* 관련 케이스 한 줄 → {c:"초진 8", tooth:"#46"} (치식은 케이스 이름 뒤 첫 #번호) */
+const relItems=t=>{const out=[],seen=new Set();String(t||"").split(/\n|\s·\s/).map(x=>x.trim()).filter(x=>x&&!/감별/.test(x)).forEach(x=>{const m=x.match(/^(초진|두근두근)\s*#?(\d+)(.*)$/);if(!m)return;const c=`${m[1]} ${m[2]}`;if(seen.has(c))return;seen.add(c);
+  const tm=m[3].match(/#([1-4][1-8]|[5-8][1-5])(?!\d)/);out.push({c,tooth:tm?"#"+tm[1]:""})});return out};
+const relCases=t=>relItems(t).map(x=>x.c);
+/* C형: 할 술기 + 치식 (질환 이름 = 술기 이름) */
+const skillFor=(a,date)=>{const p=prob(a.problem_id);if(!p||p.type!=="C")return "";const c=caseFor(a,date);const it=relItems(p.related).find(x=>x.c===c);return `${pkw(p)}${it&&it.tooth?" "+it.tooth:""}`};
 const hashStr=str=>{let h=2166136261;for(const ch of str){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0};
 const caseOrder=(a,date)=>{const p=prob(a.problem_id);const cs=p?relCases(p.related):[];return cs.map(c=>[hashStr(`${date}|${a.slot}|${a.member_id}|${a.problem_id}|${c}`),c]).sort((x,y)=>x[0]-y[0]).map(x=>x[1])};
 /* 같은 조·타임 안에서는 케이스 번호가 겹치지 않게 */
@@ -710,7 +715,7 @@ function renderResult(){
       for(const t of ts){h+=`<div class="trow" style="${tStyle(t)}">${t}형</div>`;
         for(const a of gr.filter(x=>((prob(x.problem_id)||{}).type||"?")===t)){const i=S.draft.indexOf(a);
           h+=`<div class="arow"><i></i><span class="atxt">${esc((mem(a.member_id)||{}).name||"?")}</span>`+(RO?`<span class="atxt">${pbadge(prob(a.problem_id))}</span>`:`<select data-ap="${i}" aria-label="${esc((mem(a.member_id)||{}).name||"")} ${t}형 문제">${pOpts(t,a.problem_id)}</select>`);
-          {const pr=prob(a.problem_id),cs=caseFor(a,S.date);if(pr&&pr.related)h+=`<div class="rel">${cs?`<b class="today-case">오늘 ${esc(cs)}</b> · `:""}${esc(relShort(pr.related))}</div>`}
+          {const pr=prob(a.problem_id),cs=caseFor(a,S.date),sk=skillFor(a,S.date);if(pr&&pr.related)h+=`<div class="rel">${cs?`<b class="today-case">오늘 ${esc(cs)}${sk?` → ${esc(sk)}`:""}</b> · `:""}${esc(relShort(pr.related))}</div>`}
           if(saved&&day)h+=fbThread({day:day.id,slot:a.slot,member:a.member_id,problem:a.problem_id},`${(mem(a.member_id)||{}).name||""} · ${pcode(prob(a.problem_id))} 피드백`);
           h+=`</div>`}}
       h+=`</div>`}
@@ -759,10 +764,11 @@ async function saveDay(){const v=validate();if(v){toast(v);return}
 function planData(){const day=dayOf(S.date);const skipped=S.savedId&&!S.dirty&&day?(day.skipped||[]):[];
   const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort().filter(s=>!skipped.includes(s)).map(s=>{const rows=S.draft.filter(a=>a.slot===s);
     return {s,groups:[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b).map(g=>{const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);const ts=[];gr.forEach(a=>{const t=(prob(a.problem_id)||{}).type||"?";if(!ts.includes(t))ts.push(t)});
-      return {g,members:grpMembers(gr).map(m=>(mem(m)||{}).name||"?"),types:ts.map(t=>({t,rows:gr.filter(a=>((prob(a.problem_id)||{}).type||"?")===t).map(a=>({name:(mem(a.member_id)||{}).name||"?",code:pcode(prob(a.problem_id)),kw:pkw(prob(a.problem_id)),cs:caseFor(a,S.date),label:plabel(prob(a.problem_id))}))}))}})}});
+      return {g,members:grpMembers(gr).map(m=>(mem(m)||{}).name||"?"),types:ts.map(t=>({t,rows:gr.filter(a=>((prob(a.problem_id)||{}).type||"?")===t).map(a=>({name:(mem(a.member_id)||{}).name||"?",code:pcode(prob(a.problem_id)),kw:pkw(prob(a.problem_id)),cs:caseFor(a,S.date),sk:skillFor(a,S.date),label:plabel(prob(a.problem_id))}))}))}})}});
   return {title:`${md(S.date)} ${S.D.unit} 연습`,set:TYPES().map(t=>({t,items:S.setIds.filter(id=>(prob(id)||{}).type===t).map(id=>prob(id))})).filter(x=>x.items.length),slots}}
 function planText(){const P=planData();const L=[`📋 ${P.title}`];
-  for(const sl of P.slots){L.push("",`[${sl.s}타임]`);for(const g of sl.groups){L.push(`${g.g}조 (${g.members.join("·")})`);for(const t of g.types)L.push(`  ${t.t}: `+t.rows.map(r=>`${r.name} ${r.cs||r.kw}`).join(" · "))}}
+  for(const sl of P.slots){L.push("",`[${sl.s}타임]`);for(const g of sl.groups){L.push(`${g.g}조 (${g.members.join("·")})`);for(const t of g.types){if(t.rows.some(r=>r.sk))t.rows.forEach((r,k)=>L.push(`${k?"     ":`  ${t.t}: `}${r.name} ${r.cs?`${r.cs} → ${r.sk}`:r.sk||r.kw}`));
+      else L.push(`  ${t.t}: `+t.rows.map(r=>`${r.name} ${r.cs||r.kw}`).join(" · "))}}}
   if(S.D.member_code)L.push("",`피드백 쓰기: ${memberLink()}`);return L.join("\n")}
 async function copyDay(){const txt=planText();
   if(navigator.share&&/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)){try{await navigator.share({text:txt});return}catch(e){if(e&&e.name==="AbortError")return}}
@@ -783,13 +789,13 @@ function drawPlan(P){
       T(`${sl.s}타임`,PAD+12,y+7,16,800,"#16202a");y+=40;
       const n=Math.min(3,sl.groups.length),cw=(W-PAD*2-GAP*(n-1))/n;
       for(let r=0;r<sl.groups.length;r+=n){const row=sl.groups.slice(r,r+n);
-        const hs=row.map(g=>{font(13,700);const ml=wrap(`${g.g}조 · ${g.members.join(" ")}`,cw-20);return 10+ml.length*18+6+g.types.reduce((a,t)=>a+20+t.rows.length*19,0)+8});
+        const hs=row.map(g=>{font(13,700);const ml=wrap(`${g.g}조 · ${g.members.join(" ")}`,cw-20);return 10+ml.length*18+6+g.types.reduce((a,t)=>a+20+t.rows.reduce((b,r)=>b+19+(r.sk&&r.cs?16:0),0),0)+8});
         const H=Math.max(...hs);
         row.forEach((g,k)=>{const x0=PAD+k*(cw+GAP);
           if(draw){ctx.strokeStyle="#dde3e6";ctx.lineWidth=1;ctx.beginPath();ctx.roundRect?ctx.roundRect(x0+.5,y+.5,cw-1,H-1,10):ctx.rect(x0,y,cw,H);ctx.stroke()}
           let yy=y+10;font(13,700);wrap(`${g.g}조 · ${g.members.join(" ")}`,cw-20).forEach(l=>{T(l,x0+10,yy,13,700,"#16202a");yy+=18});yy+=6;
           for(const t of g.types){T(`${t.t}형`,x0+10,yy+3,11.5,800,C[t.t]||"#333");yy+=20;
-            for(const rr of t.rows){T(rr.name,x0+10,yy,13,500,"#16202a");font(13,800);let kw=rr.cs||rr.kw;const kwMax=cw-20-ctx.measureText(rr.name).width-12;while(kw.length>1&&ctx.measureText(kw).width>kwMax)kw=kw.slice(0,-1);if(kw!==(rr.cs||rr.kw))kw=kw.slice(0,-1)+"…";T(kw,x0+cw-10,yy,13,800,"#16202a","right");yy+=19}}});
+            for(const rr of t.rows){T(rr.name,x0+10,yy,13,500,"#16202a");font(13,800);let kw=rr.cs||rr.kw;const kwMax=cw-20-ctx.measureText(rr.name).width-12;while(kw.length>1&&ctx.measureText(kw).width>kwMax)kw=kw.slice(0,-1);if(kw!==(rr.cs||rr.kw))kw=kw.slice(0,-1)+"…";T(kw,x0+cw-10,yy,13,800,"#16202a","right");yy+=19;if(rr.sk&&rr.cs){T("→ "+rr.sk,x0+cw-10,yy-2,11.5,700,"#0f8f82","right");yy+=16}}}});
         y+=H+GAP}
       y+=6}
     if(S.D.member_code){T("피드백 쓰기: "+memberLink(),PAD,y,11,400,"#8a94a3");y+=18}
