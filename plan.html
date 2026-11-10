@@ -189,7 +189,7 @@ body.member .ptabs{grid-template-columns:repeat(3,1fr)}
 .trow{font-size:.74rem;font-weight:800;color:var(--tc);padding:6px 10px 2px;border-top:1px solid var(--line);background:color-mix(in srgb,var(--tc) 6%,transparent)}
 .trow+.arow{border-top:0}
 .rel{grid-column:2/-1;font-size:.74rem;color:var(--muted);line-height:1.4;margin-top:-2px}
-.rel::before{content:"두근두근 초진 ";font-weight:700;color:var(--faint)}
+.rel::before{content:"관련 ";font-weight:700;color:var(--faint)}
 .prel{grid-column:1/-1;width:100%;font:inherit;font-size:.8rem;line-height:1.5;padding:6px 8px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.86rem;font-weight:500;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
@@ -398,7 +398,9 @@ const plabel=p=>p?`${pcode(p)} ${p.name}`.trim():"(지운 질환)";
 const pbadge=p=>p?`<span class="tbadge" style="${tStyle(p.type)}">${esc(pcode(p))}</span>${esc(p.name)}`:"(지운 질환)";
 const dayOf=date=>S.D.days.find(d=>d.date===date);
 /* 관련 초진 케이스: 저장은 '#번호 제목' 한 줄씩, 화면엔 번호만 (설정 탭에서만 전체) */
-const relShort=t=>String(t||"").split(/\n|\s·\s/).map(x=>x.trim()).filter(Boolean).map(x=>{const m=x.match(/^#\s?(\d+)/);return m?`#${m[1]}${/감별/.test(x)?"(감별)":""}`:x.replace(/\s*\(.*\)\s*$/,"")}).join(" · ");
+const relShort=t=>{const g={},other=[];String(t||"").split(/\n|\s·\s/).map(x=>x.trim()).filter(Boolean).forEach(x=>{const m=x.match(/^(초진|두근두근)\s*#?(\d+)/);
+  if(m){(g[m[1]]=g[m[1]]||[]).push(m[2]+(/감별/.test(x)?"(감별)":""))}else{const h=x.match(/^#\s?(\d+)/);other.push(h?`#${h[1]}`:x.replace(/\s*\(.*\)\s*$/,""))}});
+  return [...["초진","두근두근"].filter(k=>g[k]).map(k=>`${k} ${[...new Set(g[k])].join("·")}`),...other].join(" / ")};
 /* 기록 집계: filter(day) 통과한 날, 안 함 타임 제외 */
 function tally(filter,logFilter){
   const T={solve:{},fb:{},pair:{},big:{},sol:{},fbn:{},last:{}};
@@ -598,7 +600,7 @@ function drawPlan(P){
     font(13);T("조 안에서 형마다 1인 1문제 + 나머지 피드백",PAD,y,13,400,"#667085");y+=26;
     for(const x of P.set){font(14,800);T(`${x.t}형`,PAD,y,14,800,C[x.t]||"#333");font(13.5);
       const ls=wrap(x.items.map(plabel).join(" · "),W-PAD*2-46);ls.forEach((l,k)=>T(l,PAD+46,y+k*20,13.5,500,"#16202a"));y+=ls.length*20+2;
-      for(const p of x.items.filter(p=>p.related)){font(11.5);const rl=wrap(`${pcode(p)} 두근두근 초진 ${relShort(p.related)}`,W-PAD*2-46);rl.forEach((l,k)=>T(l,PAD+46,y+k*16,11.5,400,"#8a94a3"));y+=rl.length*16}
+      for(const p of x.items.filter(p=>p.related)){font(11.5);const rl=wrap(`${pcode(p)}  ${relShort(p.related)}`,W-PAD*2-46);rl.forEach((l,k)=>T(l,PAD+46,y+k*16,11.5,400,"#8a94a3"));y+=rl.length*16}
       y+=8}
     y+=4;
     for(const sl of P.slots){
@@ -650,7 +652,7 @@ function renderStats(){
       <table class="stbl"><thead><tr><th>질환</th><th>직접</th><th>피드백</th><th>마지막으로 푼 날</th></tr></thead><tbody>`;
     for(const p of ps){const s=g2(T.solve,id,p.id),f=g2(T.fb,id,p.id),last=(T.last[id]||{})[p.id];
       h+=`<tr class="click ${s?"":"zero"} ${S.open===p.id?"open":""}" data-op="${p.id}"><td class="nm">${pbadge(p)}</td><td>${s||"0"}</td><td>${f}</td><td class="mono">${last?md(last):"–"}</td></tr>`;
-      if(S.open===p.id){const l=fbs(p.id);h+=`<tr><td colspan="4" class="fbl">${p.related?`<div class="hint" style="margin-bottom:6px"><b>두근두근 초진</b> ${esc(relShort(p.related))}</div>`:""}${l.length?l.map(x=>`<div class="fbitem"><div class="fbh"><small>${md(x.date)}${x.kind==="a"?` ${x.slot}타임`:""}</small><span class="kind">${x.kind==="a"?"조 짜기":"직접 추가"}</span>${x.kind==="l"?`<button class="x" type="button" data-ldel="${x.id}" aria-label="이 기록 지우기">✕</button>`:""}</div>
+      if(S.open===p.id){const l=fbs(p.id);h+=`<tr><td colspan="4" class="fbl">${p.related?`<div class="hint" style="margin-bottom:6px"><b>관련 케이스</b> ${esc(relShort(p.related))}</div>`:""}${l.length?l.map(x=>`<div class="fbitem"><div class="fbh"><small>${md(x.date)}${x.kind==="a"?` ${x.slot}타임`:""}</small><span class="kind">${x.kind==="a"?"조 짜기":"직접 추가"}</span>${x.kind==="l"?`<button class="x" type="button" data-ldel="${x.id}" aria-label="이 기록 지우기">✕</button>`:""}</div>
         ${x.kind==="l"&&x.obs.length?`<div class="hint">같이 본 사람: ${x.obs.map(o=>esc((mem(o)||{}).name||"?")).join(", ")}</div>`:""}
         <textarea data-efb="${x.kind}:${x.id}" placeholder="피드백 적기" aria-label="피드백">${esc(x.fb||"")}</textarea><span class="fbm hint" data-efm="${x.id}"></span></div>`).join(""):`<span class="hint">아직 직접 푼 적이 없어요. 위 '기록 추가'로 넣을 수 있어요.</span>`}</td></tr>`}}
     h+=`</tbody></table>`;$("memTbl").innerHTML=ps.length?h:`<div class="empty">질환이 없어요.</div>`;
@@ -679,7 +681,7 @@ function renderSetup(){
   const types=[...new Set(["A","B","C",...PROB.map(p=>p.type)])];
   $("probMeta").textContent=types.map(t=>`${t} ${PROB.filter(p=>p.type===t).length}`).join(" · ");
   $("probList").innerHTML=types.map(t=>{const list=PROB.map((p,i)=>({p,i})).filter(x=>x.p.type===t).sort((a,b)=>a.p.no-b.p.no);
-    return `<div class="tsec" style="${tStyle(t)}"><h3>${t}형</h3>${list.map(({p,i})=>`<div class="prow"><input type="number" min="1" max="49" data-pn="${i}" value="${p.no}" aria-label="번호"><input data-pt="${i}" value="${esc(p.name)}" placeholder="질환 이름" aria-label="질환 이름"><button class="x" type="button" data-px="${i}" aria-label="지우기">✕</button><textarea class="prel" data-pr="${i}" rows="${Math.max(1,String(p.related||"").split("\n").length)}" placeholder="관련 두근두근 초진 케이스 (한 줄에 하나: #114 재발성 구순 단순포진)" aria-label="관련 초진 케이스">${esc(p.related||"")}</textarea></div>`).join("")}
+    return `<div class="tsec" style="${tStyle(t)}"><h3>${t}형</h3>${list.map(({p,i})=>`<div class="prow"><input type="number" min="1" max="49" data-pn="${i}" value="${p.no}" aria-label="번호"><input data-pt="${i}" value="${esc(p.name)}" placeholder="질환 이름" aria-label="질환 이름"><button class="x" type="button" data-px="${i}" aria-label="지우기">✕</button><textarea class="prel" data-pr="${i}" rows="${Math.max(1,String(p.related||"").split("\n").length)}" placeholder="관련 케이스 (한 줄에 하나: 초진 13 지치주위염 / 두근두근 28 긴장성 두통)" aria-label="관련 초진 케이스">${esc(p.related||"")}</textarea></div>`).join("")}
       <button class="btn sm" type="button" data-padd="${t}">+ ${t}형 질환</button></div>`}).join("");
   $("probList").querySelectorAll("[data-pn]").forEach(i=>i.oninput=()=>{PROB[Number(i.dataset.pn)].no=Number(i.value)});
   $("probList").querySelectorAll("[data-pt]").forEach(i=>i.oninput=()=>{PROB[Number(i.dataset.pt)].name=i.value});
