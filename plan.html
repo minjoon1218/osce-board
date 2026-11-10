@@ -135,10 +135,25 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .slot-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 12px;background:var(--sunk)}
 .slot-h b{margin-right:auto;font-size:.94rem}
 .slot.skip .groups{opacity:.45}
-.groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px;padding:10px}
-.grp{border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
-.grp-h{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);font-size:.84rem;font-weight:700}
-.grp-h span{font-weight:500;color:var(--muted);font-size:.76rem}
+.groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px;padding:10px;align-items:start}
+.grp{border:1px solid var(--line);border-top:4px solid var(--gc,var(--line));border-radius:12px;background:var(--surface);overflow:hidden}
+.grp.mine{border-color:var(--gc);border-width:2px;border-top-width:5px;box-shadow:0 4px 14px color-mix(in srgb,var(--gc) 18%,transparent)}
+.grp-h{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--gc) 9%,var(--surface));flex-wrap:wrap}
+.gno{font-size:1.05rem;font-weight:900;color:#fff;background:var(--gc);border-radius:8px;padding:2px 10px;flex:none}
+.mytag{font-size:.74rem;font-weight:800;color:var(--gc);border:1.5px solid var(--gc);border-radius:99px;padding:1px 8px}
+.gsub{font-weight:500;color:var(--muted);font-size:.76rem;margin-left:auto}
+.gtog{font-size:.76rem;font-weight:700;color:var(--muted);padding:3px 8px;border-radius:7px}
+.gtog:hover{background:var(--sunk)}
+.grp.folded{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;text-align:left;cursor:pointer;background:color-mix(in srgb,var(--gc) 6%,var(--surface))}
+.grp.folded .gnames{font-weight:600;font-size:.9rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grp.folded .gtog{margin-left:auto;flex:none}
+.grp.folded:hover{background:color-mix(in srgb,var(--gc) 12%,var(--surface))}
+.linkbtn{font-size:.78rem;font-weight:700;color:var(--accent-ink);padding:2px 6px;border-radius:6px;margin-left:auto}
+.linkbtn:hover{background:var(--accent-soft)}
+.stabs small.st,.slot-h small.st{font-size:.72rem;font-weight:600;color:var(--muted);margin-left:4px;font-family:var(--t-mono)}
+.nowdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--out);margin-left:5px;vertical-align:2px;animation:nowp 1.6s ease-in-out infinite}
+@keyframes nowp{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.nowdot{animation:none}}
 .arow{display:grid;grid-template-columns:1.4em minmax(0,1fr) minmax(0,1.3fr);gap:6px;align-items:center;padding:6px 10px;border-top:1px solid var(--line)}
 .arow:first-of-type{border-top:0}
 .arow>i{font-style:normal;font-family:var(--t-mono);font-size:.78rem;color:var(--faint);text-align:center}
@@ -493,7 +508,7 @@ const api={
     return await rpc("prac_delete_log",{p_code:S.code,p_unit:unitArg(),p_id:id})},
   async delDay(dayId){if(!LIVE){const d=demo.db();d.days=d.days.filter(x=>x.id!==dayId);demo.save(d);return true}
     return await rpc("prac_delete_day",{p_code:S.code,p_unit:unitArg(),p_day:dayId})},
-  async bookings(date,teams){if(!LIVE)return [];try{const {data}=await sb.from("bookings").select("room,start_min,end_min,team").eq("date",date).in("team",teams).order("start_min");return data||[]}catch(e){return []}}
+  async bookings(date,teams){if(!LIVE){try{return JSON.parse(localStorage.getItem("osce-demo-bk")||"[]")}catch(e){return []}}try{const {data}=await sb.from("bookings").select("room,start_min,end_min,team").eq("date",date).in("team",teams).order("start_min");return data||[]}catch(e){return []}}
 };
 function errText(e){const m=String(e&&e.message||e);
   if(m.includes("EMPTY"))return "내용을 적어 주세요.";
@@ -672,7 +687,15 @@ function loadDate(date){
   renderToday();loadBookings()}
 async function loadBookings(){const el=$("bkList");el.innerHTML="";const list=await api.bookings(S.date,S.D.teams||[]);
   if(S.date!==$("dateIn").value)return;
+  /* 예약 시간대(겹치면 하나로) = 1타임, 2타임 … 순서 */
+  const bl=[];list.slice().sort((a,b)=>a.start_min-b.start_min).forEach(b=>{const l=bl[bl.length-1];if(l&&b.start_min<l.e)l.e=Math.max(l.e,b.end_min);else bl.push({s:b.start_min,e:b.end_min})});
+  S.blocks=bl;
+  if(S.autoSlotDone!==S.date){S.autoSlotDone=S.date;const v=nowSlot();if(v&&v!==S.vslot&&S.draft&&S.draft.some(a=>a.slot===v)){S.vslot=v;renderResult()}else renderResult()}else renderResult();
   el.innerHTML=list.length?`<span>이 날 우리 예약</span>`+list.map(b=>`<span><b>${fmt(b.start_min)}–${fmt(b.end_min)}</b> ${b.room}번 방${(S.D.teams||[]).length>1?` · ${esc(b.team)}조`:""}</span>`).join(""):(LIVE?`<span>이 날 우리 조 예약이 아직 없어요.</span>`:"")}
+/* 오늘이면 지금 시간이 들어 있는 예약 시간대의 타임 (시작 30분 전부터 그 타임) */
+function nowSlot(){if(S.date!==ymd()||!(S.blocks||[]).length)return 0;const d=new Date(),n=d.getHours()*60+d.getMinutes();let k=0;
+  S.blocks.forEach((b,i)=>{if(n>=b.s-30)k=i+1});const max=Math.max(0,...(S.draft||[]).map(a=>a.slot));return Math.min(Math.max(k,1),max||1)}
+const slotTime=x=>{const b=(S.blocks||[])[x-1];return b?fmt(b.s):""};
 function renderToday(){
   $("dateIn").value=S.date;
   const days=S.D.days.slice().sort((a,b)=>a.date<b.date?-1:1);const t=ymd();
@@ -729,14 +752,20 @@ function renderResult(){
   if(!slots.includes(S.vslot))S.vslot=slots[0];
   if(slots.length>1||!RO){const ix=slots.indexOf(S.vslot);
     h+=`<div class="spager"><button type="button" class="pg" data-vs="${slots[ix-1]||""}" ${ix>0?"":"disabled"} aria-label="이전 타임">‹</button>
-      <div class="stabs" role="tablist">${slots.map(x=>`<button type="button" role="tab" data-vs="${x}" aria-selected="${x===S.vslot}">${x}타임${saved&&day&&(day.skipped||[]).includes(x)?" ·안 함":""}</button>`).join("")}</div>
+      <div class="stabs" role="tablist">${slots.map(x=>`<button type="button" role="tab" data-vs="${x}" aria-selected="${x===S.vslot}">${x}타임${slotTime(x)?`<small class="st">${slotTime(x)}</small>`:""}${S.date===ymd()&&nowSlot()===x&&(S.blocks||[]).length?`<i class="nowdot" title="지금"></i>`:""}${saved&&day&&(day.skipped||[]).includes(x)?" ·안 함":""}</button>`).join("")}</div>
       <button type="button" class="pg" data-vs="${slots[ix+1]||""}" ${ix<slots.length-1?"":"disabled"} aria-label="다음 타임">›</button>
       ${RO?"":`<span class="spacer"></span><button class="btn sm" type="button" id="reSlot">🎲 ${S.vslot}타임만 다시</button>${slots.length>1&&S.vslot===slots[slots.length-1]?`<button class="btn sm ghost" type="button" id="delSlot">${S.vslot}타임 빼기</button>`:""}<button class="btn sm primary" type="button" id="addSlot">+ 타임 추가</button>`}</div>`}
   for(const s of slots.filter(x=>x===S.vslot)){const skip=saved&&day&&(day.skipped||[]).includes(s);
-    const rows=S.draft.filter(a=>a.slot===s);const grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);
-    h+=`<div class="slot ${skip?"skip":""}"><div class="slot-h"><b>${s}타임</b>${saved&&!RO?`<label class="chk"><input type="checkbox" data-skip="${s}" ${skip?"checked":""}> 이 타임 안 함</label>`:""}</div><div class="groups">`;
+    const rows=S.draft.filter(a=>a.slot===s);let grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);
+    /* 내 조(위쪽 '나')를 맨 앞에, 다른 조는 접어 둠 */
+    const me=meId(),myG=me?(rows.find(a=>a.member_id===me)||{}).grp:undefined;S.grpOpen=S.grpOpen||new Set();
+    if(myG!==undefined)grps=[myG,...grps.filter(g=>g!==myG)];
+    const gk=g=>`${S.date}:${s}:${g}`,others=grps.filter(g=>g!==myG),allOpen=others.every(g=>S.grpOpen.has(gk(g)));
+    h+=`<div class="slot ${skip?"skip":""}"><div class="slot-h"><b>${s}타임${slotTime(s)?` <small class="st">${slotTime(s)}~</small>`:""}</b>${myG!==undefined&&others.length?`<button type="button" class="linkbtn" data-gall="${s}">${allOpen?"다른 조 접기":"다른 조 펼치기"}</button>`:""}${saved&&!RO?`<label class="chk"><input type="checkbox" data-skip="${s}" ${skip?"checked":""}> 이 타임 안 함</label>`:""}</div><div class="groups">`;
     for(const g of grps){const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);const gm=grpMembers(gr);
-      h+=`<div class="grp"><div class="grp-h">${g}조 <span>${gm.length}명 · 형마다 1인 1문제 + 피드백 ${gm.length-1}번</span></div>`;
+      const mine=g===myG,folded=myG!==undefined&&!mine&&!S.grpOpen.has(gk(g)),gc=`--gc:${GCOL[(g-1)%GCOL.length]}`;
+      if(folded){h+=`<button type="button" class="grp folded" style="${gc}" data-gt="${gk(g)}" aria-expanded="false"><span class="gno">${g}조</span><span class="gnames">${gm.map(m=>esc((mem(m)||{}).name||"?")).join(" · ")}</span><span class="gtog">펼치기 ▾</span></button>`;continue}
+      h+=`<div class="grp ${mine?"mine":""}" style="${gc}"><div class="grp-h"><span class="gno">${g}조</span>${mine?`<span class="mytag">내 조</span>`:""}<span class="gsub">${gm.length}명 · 형마다 1인 1문제 + 피드백 ${gm.length-1}번</span>${myG!==undefined&&!mine?`<button type="button" class="gtog" data-gt="${gk(g)}" aria-expanded="true">접기 ▴</button>`:""}</div>`;
       h+=RO?`<div class="gmem">${gm.map(m=>esc((mem(m)||{}).name||"?")).join(" · ")}</div>`
         :`<div class="gmem">${gm.map(m=>`<select data-gm="${s}|${m}" aria-label="${s}타임 ${g}조 사람">${mOpts(m)}</select>`).join("")}</div>`;
       const ts=[];gr.forEach(a=>{const t=(prob(a.problem_id)||{}).type||"?";if(!ts.includes(t))ts.push(t)});
@@ -752,6 +781,9 @@ function renderResult(){
   if(S.savedId&&!RO)h+=`<div style="display:flex;justify-content:flex-end"><button class="btn sm ghost" type="button" id="delDay">이 날 기록 지우기</button></div>`;
   if(!saved)h+=`<div class="hint">사람·문제를 직접 바꿀 수 있어요. 조 위쪽에서 사람을 바꾸면 그 타임 안에서 두 사람 자리가 통째로 바뀌어요. 저장해야 피드백 칸이 열려요.</div>`;
   el.innerHTML=h;
+  el.querySelectorAll("[data-gt]").forEach(b=>b.onclick=()=>{const k=b.dataset.gt;S.grpOpen.has(k)?S.grpOpen.delete(k):S.grpOpen.add(k);renderResult()});
+  el.querySelectorAll("[data-gall]").forEach(b=>b.onclick=()=>{const s=Number(b.dataset.gall),rows=S.draft.filter(a=>a.slot===s),me=meId(),myG=(rows.find(a=>a.member_id===me)||{}).grp;
+    const os=[...new Set(rows.map(a=>a.grp))].filter(g=>g!==myG).map(g=>`${S.date}:${s}:${g}`);const all=os.every(k=>S.grpOpen.has(k));os.forEach(k=>all?S.grpOpen.delete(k):S.grpOpen.add(k));renderResult()});
   el.querySelectorAll("[data-vs]").forEach(b=>b.onclick=()=>{const v=Number(b.dataset.vs);if(!v)return;S.vslot=v;S.fbOpen=null;renderResult()});
   const as=$("addSlot");if(as)as.onclick=addSlot;const rs=$("reSlot");if(rs)rs.onclick=()=>reSlot(S.vslot);
   const ds=$("delSlot");if(ds)ds.onclick=()=>{const v=S.vslot;if(!confirm(`${v}타임을 뺄까요?`))return;S.draft=S.draft.filter(a=>a.slot!==v);S.slots=Math.max(...S.draft.map(a=>a.slot));delete S.sizes[v];S.vslot=S.slots;S.dirty=true;renderToday()};
@@ -775,6 +807,7 @@ function reSlot(v){const sum=parseSizes(S.sizes[v]??autoSizes(S.present.size).jo
 {let sx=0,sy=0;const r=document.getElementById("result");if(r){r.addEventListener("touchstart",e=>{const t=e.touches[0];sx=t.clientX;sy=t.clientY},{passive:true});
   r.addEventListener("touchend",e=>{if(e.target.closest("select,textarea,input"))return;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)<70||Math.abs(dy)>Math.abs(dx)*.6)return;
     const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort((a,b)=>a-b),ix=slots.indexOf(S.vslot),nx=slots[ix+(dx<0?1:-1)];if(nx){S.vslot=nx;S.fbOpen=null;renderResult()}},{passive:true})}}
+const GCOL=["#2563eb","#e8590c","#7c3aed","#0d9488","#db2777","#65a30d"];
 const skipNote=d=>d&&(d.skipped||[]).length?`<div class="hint">${d.skipped.join("·")}타임은 '안 함'으로 표시돼 기록에서 빠져요.</div>`:"";
 function validate(){if(S.present.size<2)return "나오는 사람을 2명 이상 골라 주세요.";
   for(let s=1;s<=S.slots;s++){const sum=parseSizes(S.sizes[s]??autoSizes(S.present.size).join(",")).reduce((a,b)=>a+b,0);if(sum!==S.present.size)return `${s}타임 조 인원 합(${sum})이 나오는 사람 수(${S.present.size})와 달라요.`}
