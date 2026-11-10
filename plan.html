@@ -816,7 +816,8 @@ function renderSet(){
   $("genBtn").textContent=S.draft?"🎲 다시 짜기":"🎲 조 · 문제 짜기"}
 /* 형 하나에 질환 하나 더(덜 해 본 순) */
 function markDirty(){if(S.draft)S.dirty=true;renderStatus()}
-function renderStatus(){const share=S.draft&&S.draft.length?`<button class="btn sm" type="button" id="copyDay">텍스트</button><button class="btn sm" type="button" id="imgDay">이미지</button>`:"";
+function renderStatus(){const multi=S.draft&&new Set(S.draft.map(a=>a.slot)).size>1,sl=multi?`${S.vslot||1}타임 `:"";
+  const share=S.draft&&S.draft.length?`<button class="btn sm" type="button" id="copyDay" title="지금 보고 있는 타임만 복사">${sl}텍스트</button><button class="btn sm" type="button" id="imgDay" title="지금 보고 있는 타임만 저장">${sl}이미지</button>`:"";
   if(S.role==="member")$("resStatus").innerHTML=share;
   else if(!S.edit){$("resStatus").innerHTML=(S.dirty&&S.draft?`<span class="tag draft">저장 중…</span>`:"")+share+(S.draft&&S.draft.length?`<button class="btn sm ghost" type="button" id="goPlan2">✏️ 고치기</button>`:"");const g=$("goPlan2");if(g)g.onclick=()=>setTab("plan")}
   else $("resStatus").innerHTML=!S.draft?"":(S.saving?`<span class="tag draft">저장 중…</span>`:S.dirty||!S.savedId?`<span class="tag draft" ${S.autoErr?`title="${esc(S.autoErr)}"`:""}>${S.autoErr?"자동 저장 안 됨":"곧 자동 저장"}</span><button class="btn sm primary" type="button" id="saveDay">저장</button>`:`<span class="tag saved">✓ 저장됨</span>`)+share;
@@ -920,8 +921,9 @@ async function saveDay(auto){clearTimeout(S.autoT);if(S.saving||!S.draft||!S.dra
   catch(e){S.saving=false;S.autoErr=errText(e);S.autoFail=sig;renderStatus();if(auto!==true)toast(errText(e))}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden"&&S.autoT&&(S.dirty||!S.savedId)&&S.draft&&S.draft.length)saveDay(true)});
 /* 공유용: 화면에 보이는 편성(저장 전이어도) 기준 */
-function planData(){const day=dayOf(S.date);const skipped=S.savedId&&!S.dirty&&day?(day.skipped||[]):[];
-  const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort().filter(s=>!skipped.includes(s)).map(s=>{const rows=S.draft.filter(a=>a.slot===s);
+/* 공유는 지금 보고 있는 타임만 (타임이 하나면 그 타임) */
+function planData(){const day=dayOf(S.date);const all=[...new Set((S.draft||[]).map(a=>a.slot))].sort((a,b)=>a-b);const v=all.includes(S.vslot)?S.vslot:all[0];
+  const slots=all.filter(s=>s===v).map(s=>{const rows=S.draft.filter(a=>a.slot===s);
     return {s,groups:[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b).map(g=>{const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);
       return {g,members:grpMembers(gr).map(m=>(mem(m)||{}).name||"?"),types:roundsOf(gr).map(R=>({t:R.t,rows:R.rows.map(a=>({name:(mem(a.member_id)||{}).name||"?",code:pcode(prob(a.problem_id)),kw:pkw(prob(a.problem_id)),cs:caseFor(a,S.date),sk:skillFor(a,S.date),label:plabel(prob(a.problem_id))}))}))}})}});
   return {title:`${md(S.date)} ${S.D.unit} 연습`,set:TYPES().map(t=>({t,items:unionSet().filter(id=>(prob(id)||{}).type===t).map(id=>prob(id))})).filter(x=>x.items.length),slots}}
@@ -964,7 +966,7 @@ function drawPlan(P){
     return y+PAD-10};
   const H=Math.ceil(run(false));const sc=2;cv.width=W*sc;cv.height=H*sc;ctx.scale(sc,sc);ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);run(true);return cv}
 async function shareImage(){try{const P=planData();const cv=drawPlan(P);
-    const blob=await new Promise(r=>cv.toBlob(r,"image/png"));const name=`연습플랜_${S.date}.png`;
+    const blob=await new Promise(r=>cv.toBlob(r,"image/png"));const name=`연습플랜_${S.date}_${S.vslot||1}타임.png`;
     let file=null;try{file=new File([blob],name,{type:"image/png"})}catch(e){}
     if(file&&navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:P.title});return}catch(e){if(e&&e.name==="AbortError")return}}
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);toast("이미지를 저장했어요")}
