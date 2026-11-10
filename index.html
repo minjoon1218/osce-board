@@ -1404,8 +1404,8 @@ function syncThemeBtn(){const dark=document.documentElement.getAttribute("data-t
 $("themeBtn").onclick=()=>{const next=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",next);store("osce-theme",next);syncThemeBtn()};
 
 function syncTeams(){window.OSCETeams.set([...(S.teamList||[]),...S.bookings.map(b=>b.team)])}
-/* 연습 플랜: 관리자 + 1–N일차(rule_cfg.prac_max_day, 기본 4) 조장만 */
-function canPlan(){if(isAdmin())return true;if(!isLeader())return false;const r=ruleOf(S.team),mx=(S.cfg&&S.cfg.prac_max_day!=null)?S.cfg.prac_max_day:4;return !!(r&&r.exam_day!=null&&r.exam_day>=1&&r.exam_day<=mx)}
+/* 연습 플랜: 관리자 + rule_cfg prac_min_day~prac_max_day 일차 조장만 (지금 3일차) */
+function canPlan(){if(isAdmin())return true;if(!isLeader())return false;const r=ruleOf(S.team),c=S.cfg||{},mn=c.prac_min_day??1,mx=c.prac_max_day??4;return !!(r&&r.exam_day!=null&&r.exam_day>=mn&&r.exam_day<=mx)}
 function render(){syncTeams();renderAuth();{const pt=$("planTab");if(pt)pt.hidden=!canPlan()}renderNotices();renderTop();renderGrid();renderKits()}
 
 /* ================= 시작 ================= */

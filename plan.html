@@ -183,6 +183,10 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
 .fbitem .fbh{display:flex;align-items:center;gap:6px;margin-bottom:3px}
 .fbitem .fbh small{margin-right:auto}
 .kind{font-size:.68rem;font-weight:700;border-radius:99px;padding:0 7px;background:var(--surface);color:var(--muted);border:1px solid var(--line-strong)}
+.gmem{display:flex;flex-wrap:wrap;gap:4px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:.86rem;font-weight:600}
+.gmem select{width:auto;flex:1 1 30%;min-width:0;padding:4px 6px;font-size:.84rem;min-height:30px}
+.trow{font-size:.74rem;font-weight:800;color:var(--tc);padding:6px 10px 2px;border-top:1px solid var(--line);background:color-mix(in srgb,var(--tc) 6%,transparent)}
+.trow+.arow{border-top:0}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.86rem;font-weight:500;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 @media (max-width:440px){.brand h1{display:none}}
@@ -203,7 +207,7 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
   <section class="card" id="gate" hidden style="max-width:440px;margin:24px auto">
     <div class="card-h"><h2>코드로 들어오기</h2></div>
     <div class="card-b">
-      <p class="hint" style="margin:0">조원은 조장한테 받은 <b>조원 코드</b>, 조장은 예약판 <b>조장 코드</b>를 넣어 주세요. 조원 코드로는 조 편성 보기·피드백 쓰기·기록 보기를 할 수 있어요.</p>
+      <p class="hint" style="margin:0">조원은 단톡에 올라온 <b>연습 플랜 링크</b>로 들어오면 바로 열려요. 조장은 예약판 <b>조장 코드</b>를 넣어 주세요.</p>
       <input class="codein" id="codeIn" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="코드" aria-label="코드">
       <div class="msg err" id="gMsg"></div>
       <button class="btn primary" type="button" id="codeGo">들어가기</button>
@@ -211,7 +215,7 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
   </section>
 
   <section class="card" id="closed" hidden style="max-width:440px;margin:24px auto">
-    <div class="card-b"><b>연습 플랜은 지금 1–4일차 조만 쓸 수 있어요.</b><span class="hint">다른 조 코드로 들어오려면 위에서 로그아웃해 주세요.</span></div>
+    <div class="card-b"><b>연습 플랜은 지금 3일차만 쓸 수 있어요.</b><span class="hint">다른 조 코드로 들어오려면 위에서 로그아웃해 주세요.</span></div>
   </section>
 
   <div id="app" hidden>
@@ -246,8 +250,7 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
           <div class="card-h"><h2>그날 문제 세트</h2><button class="btn sm" type="button" id="setAuto">자동으로 고르기</button></div>
           <div class="card-b">
             <div id="setRows" style="display:grid;gap:6px"></div>
-            <div class="two"><button class="btn sm" type="button" id="setAdd">+ 문제 추가</button><button class="btn sm ghost" type="button" id="setDel">− 마지막 빼기</button></div>
-            <span class="hint">모든 조가 같은 세트로 연습해요. 자동은 A·B·C 한 문제씩(조원들이 덜 해 본 질환), 4명 조가 있으면 한 문제 더 골라요.</span>
+            <span class="hint">형마다 조 인원만큼(3명 조면 3문제, 4명 조가 있으면 4문제) 골라요. 조 안에서 A형 → B형 → C형 순서로, 형마다 한 명씩 다른 문제를 풀고 나머지가 피드백해요. 모든 조가 같은 세트를 써요. 자동은 조원들이 덜 해 본 질환부터 골라요.</span>
           </div>
         </section>
         <button class="btn primary lead" type="button" id="genBtn" style="padding:11px">🎲 조 · 문제 짜기</button>
@@ -370,7 +373,7 @@ const api={
   async bookings(date,teams){if(!LIVE)return [];try{const {data}=await sb.from("bookings").select("room,start_min,end_min,team").eq("date",date).in("team",teams).order("start_min");return data||[]}catch(e){return []}}
 };
 function errText(e){const m=String(e&&e.message||e);
-  if(m.includes("PRAC_CLOSED"))return "연습 플랜은 지금 1–4일차 조만 쓸 수 있어요.";
+  if(m.includes("PRAC_CLOSED"))return "연습 플랜은 지금 3일차만 쓸 수 있어요.";
   if(m.includes("NOT_LEADER"))return S.role==="member"?"조장 코드로만 할 수 있어요.":"코드가 맞지 않아요.";
   if(m.includes("BAD_TEAM"))return "묶음을 골라 주세요.";
   if(m.includes("BAD_ITEM"))return "조원이나 질환 목록이 바뀌었어요. 새로고침 후 다시 해 주세요.";
@@ -395,12 +398,13 @@ function tally(filter,logFilter){
   for(const d of S.D.days){if(!filter(d))continue;
     for(let s=1;s<=d.slots;s++){if((d.skipped||[]).includes(s))continue;
       const rows=d.assigns.filter(a=>a.slot===s);const g={};rows.forEach(a=>(g[a.grp]=g[a.grp]||[]).push(a));
-      const sizes=Object.values(g).map(x=>x.length),mn=Math.min(...sizes);
-      for(const grp of Object.values(g)){
+      const ms=Object.fromEntries(Object.entries(g).map(([k,x])=>[k,[...new Set(x.map(a=>a.member_id))]]));
+      const mn=Math.min(...Object.values(ms).map(x=>x.length));
+      for(const [k,grp] of Object.entries(g)){const gm=ms[k];
         for(const a of grp){inc2(T.solve,a.member_id,a.problem_id);inc(T.sol,a.member_id);(T.last[a.member_id]=T.last[a.member_id]||{})[a.problem_id]=d.date;
-          if(grp.length>mn)inc(T.big,a.member_id);
-          for(const o of grp)if(o.member_id!==a.member_id){inc2(T.fb,o.member_id,a.problem_id);inc(T.fbn,o.member_id)}}
-        for(let i=0;i<grp.length;i++)for(let j=i+1;j<grp.length;j++)inc(T.pair,[grp[i].member_id,grp[j].member_id].sort().join("|"))}}}
+          for(const o of gm)if(o!==a.member_id){inc2(T.fb,o,a.problem_id);inc(T.fbn,o)}}
+        if(gm.length>mn)for(const m of gm)inc(T.big,m);
+        for(let i=0;i<gm.length;i++)for(let j=i+1;j<gm.length;j++)inc(T.pair,[gm[i],gm[j]].sort().join("|"))}}}
   /* 기록 탭에서 직접 추가한 연습: 푼 사람 직접 1회, 같이 본 사람 피드백 1회 */
   for(const l of S.D.logs||[]){if(logFilter&&!logFilter(l))continue;
     inc2(T.solve,l.member_id,l.problem_id);inc(T.sol,l.member_id);const lt=(T.last[l.member_id]=T.last[l.member_id]||{});if(!lt[l.problem_id]||lt[l.problem_id]<l.date)lt[l.problem_id]=l.date;
@@ -414,24 +418,25 @@ function autoSizes(n){if(n<=0)return [];if(n<=4)return [n];const g=Math.floor(n/
 const parseSizes=s=>String(s||"").split(/[,\s/]+/).map(Number).filter(x=>x>0);
 function slotSizes(s){const v=parseSizes(S.sizes[s]);return v.length?v.sort((a,b)=>b-a):autoSizes(S.present.size)}
 const maxSize=()=>{let m=0;for(let s=1;s<=S.slots;s++)m=Math.max(m,...slotSizes(s),0);return m};
+const TYPES=()=>[...new Set(activeProblems().map(p=>p.type))];
+const setOf=t=>S.setIds.filter(id=>(prob(id)||{}).type===t);
 
-/* 그날 문제 세트 자동: 형마다 1개(덜 해 본 질환) + 모자라면 덜 해 본 순으로 채움 */
-function pickSet(size,keep=[]){
+/* 그날 문제 세트: 형마다 k문제(= 가장 큰 조 인원) — 조원들이 덜 해 본 질환, 전날 세트는 뒤로 */
+function pickSet(k,keep=[]){
   const T=tally(d=>d.date!==S.date),present=[...S.present];
   const prev=S.D.days.filter(d=>d.date<S.date).slice(-1)[0];const recent=new Set(prev?prev.problem_set:[]);
   const exp=p=>present.reduce((a,m)=>a+g2(T.solve,m,p.id)*2+g2(T.fb,m,p.id),0)+(recent.has(p.id)?present.length*3:0)+Math.random()*.5;
-  const ps=activeProblems().filter(p=>!keep.includes(p.id));const out=[...keep];
-  const types=[...new Set(activeProblems().map(p=>p.type))];
-  for(const t of types){if(out.length>=size)break;if(out.some(id=>(prob(id)||{}).type===t))continue;
-    const c=ps.filter(p=>p.type===t&&!out.includes(p.id)).sort((a,b)=>exp(a)-exp(b))[0];if(c)out.push(c.id)}
-  while(out.length<size){const c=ps.filter(p=>!out.includes(p.id)).sort((a,b)=>exp(a)-exp(b))[0];if(!c)break;out.push(c.id)}
-  return out}
+  const out=keep.filter(id=>prob(id)&&prob(id).active);
+  for(const t of TYPES()){const have=out.filter(id=>prob(id).type===t);if(have.length>=k)continue;
+    const c=activeProblems().filter(p=>p.type===t&&!out.includes(p.id)).sort((a,b)=>exp(a)-exp(b));
+    for(let i=0;i<k-have.length&&i<c.length;i++)out.push(c[i].id)}
+  return TYPES().flatMap(t=>out.filter(id=>prob(id).type===t))}
 
-/* 조 · 문제 짜기 */
+/* 조 · 문제 짜기: 타임마다 조를 새로 나누고, 조 안에서 형(A→B→C)마다 한 명씩 다른 문제를 풀고 나머지가 피드백 */
 function combos(arr,k){const r=[];const go=(i,acc)=>{if(acc.length===k){r.push(acc.slice());return}for(let j=i;j<arr.length;j++){acc.push(arr[j]);go(j+1,acc);acc.pop()}};go(0,[]);return r}
 function perms(arr){if(arr.length<=1)return [arr.slice()];const r=[];arr.forEach((x,i)=>perms(arr.filter((_,j)=>j!==i)).forEach(p=>r.push([x,...p])));return r}
 function generate(){
-  const T=tally(d=>d.date!==S.date);const present=[...S.present];const set=S.setIds.filter(id=>prob(id));
+  const T=tally(d=>d.date!==S.date);const present=[...S.present];const types=TYPES().filter(t=>setOf(t).length);
   const tPair={},tSolved={},tSeen={};const out=[];
   const pk=(a,b)=>[a,b].sort().join("|");
   for(let s=1;s<=S.slots;s++){
@@ -442,26 +447,27 @@ function generate(){
         if(g.length>mn)for(const m of g)cost+=(T.big[m]||0)*4}
       if(!best||cost<best.cost)best={cost,gs}}
     best.gs.forEach((g,gi)=>{
-      const pool=set.length>=g.length?set:[...set,...set,...set].slice(0,Math.max(g.length,set.length));
-      let bestA=null;
-      for(const sub of combos(pool,g.length))for(const pm of perms(g)){let c=0;
-        pm.forEach((m,k)=>{const p=sub[k];c+=((tSolved[m]||new Set()).has(p)?1000:0)+g2(T.solve,m,p)*10+g2(T.fb,m,p)*2+((tSeen[m]||{})[p]||0)+Math.random()*.6});
-        if(!bestA||c<bestA.c)bestA={c,sub,pm}}
-      /* 순서: 세트 순서를 조마다 한 칸씩 밀어서(같은 재료가 동시에 겹치지 않게) */
-      const pos=p=>(set.indexOf(p)-gi+set.length*10)%Math.max(1,set.length);
-      const rows=bestA.pm.map((m,k)=>({m,p:bestA.sub[k]})).sort((a,b)=>pos(a.p)-pos(b.p));
-      rows.forEach((r,k)=>{out.push({slot:s,grp:gi+1,ord:k+1,member_id:r.m,problem_id:r.p});(tSolved[r.m]=tSolved[r.m]||new Set()).add(r.p);
-        for(const o of g)if(o!==r.m){(tSeen[o]=tSeen[o]||{});tSeen[o][r.p]=(tSeen[o][r.p]||0)+1}});
+      /* 형 순서를 조마다 한 칸씩 밀어서 같은 재료를 동시에 덜 쓰게 */
+      const tt=types.map((_,i)=>types[(i+gi)%types.length]);
+      tt.forEach((t,ti)=>{
+        const set=setOf(t);let pool=set.slice();while(pool.length<g.length)pool=pool.concat(set);
+        let bestA=null;
+        for(const sub of combos(pool,g.length))for(const pm of perms(sub)){let c=0;
+          g.forEach((m,k)=>{const p=pm[k];c+=((tSolved[m]||new Set()).has(p)?1000:0)+g2(T.solve,m,p)*10+g2(T.fb,m,p)*2+((tSeen[m]||{})[p]||0)+Math.random()*.6});
+          if(!bestA||c<bestA.c)bestA={c,pm}}
+        g.forEach((m,k)=>{const p=bestA.pm[k];out.push({slot:s,grp:gi+1,ord:ti*10+k+1,member_id:m,problem_id:p});(tSolved[m]=tSolved[m]||new Set()).add(p);
+          for(const o of g)if(o!==m){(tSeen[o]=tSeen[o]||{});tSeen[o][p]=(tSeen[o][p]||0)+1}})});
       for(let a=0;a<g.length;a++)for(let b=a+1;b<g.length;b++){const k=pk(g[a],g[b]);tPair[k]=(tPair[k]||0)+1}
     })}
   return out}
 
 /* ---------- 오늘 연습 화면 ---------- */
+const grpMembers=rows=>{const seen=[];rows.slice().sort((a,b)=>a.ord-b.ord).forEach(a=>{if(!seen.includes(a.member_id))seen.push(a.member_id)});return seen};
 function loadDate(date){
   S.date=date;S.open=null;const d=dayOf(date);
   if(d){S.savedId=d.id;S.slots=d.slots;S.setIds=d.problem_set.slice();S.draft=d.assigns.map(a=>({...a}));S.dirty=false;
     S.present=new Set(d.assigns.map(a=>a.member_id));S.sizes={};
-    for(let s=1;s<=d.slots;s++){const g={};d.assigns.filter(a=>a.slot===s).forEach(a=>g[a.grp]=(g[a.grp]||0)+1);S.sizes[s]=Object.keys(g).sort((a,b)=>a-b).map(k=>g[k]).join(",")}}
+    for(let s=1;s<=d.slots;s++){const rows=d.assigns.filter(a=>a.slot===s);const grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);S.sizes[s]=grps.map(g=>grpMembers(rows.filter(a=>a.grp===g)).length).join(",")}}
   else if(S.role==="member"){S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set();S.setIds=[]}
   else{S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set(activeMembers().map(m=>m.id));S.slots=S.slots||2;S.sizes={};S.setIds=pickSet(Math.max(3,maxSize()))}
   renderToday();loadBookings()}
@@ -483,45 +489,59 @@ function renderToday(){
   let sz="";for(let s=1;s<=S.slots;s++){const v=S.sizes[s]??autoSizes(S.present.size).join(",");const sum=parseSizes(v).reduce((a,b)=>a+b,0);
     sz+=`<label class="${sum!==S.present.size?"bad":""}"><span>${s}타임</span><input data-sz="${s}" value="${esc(v)}" inputmode="numeric" aria-label="${s}타임 조 인원"><span class="hint">${sum}/${S.present.size}명</span></label>`}
   $("sizes").innerHTML=sz;
-  $("sizes").querySelectorAll("[data-sz]").forEach(i=>{i.oninput=()=>{S.sizes[i.dataset.sz]=i.value;const sum=parseSizes(i.value).reduce((a,b)=>a+b,0);i.parentElement.classList.toggle("bad",sum!==S.present.size);i.parentElement.querySelector(".hint").textContent=`${sum}/${S.present.size}명`;markDirty()}});
+  $("sizes").querySelectorAll("[data-sz]").forEach(i=>{i.oninput=()=>{S.sizes[i.dataset.sz]=i.value;const sum=parseSizes(i.value).reduce((a,b)=>a+b,0);i.parentElement.classList.toggle("bad",sum!==S.present.size);i.parentElement.querySelector(".hint").textContent=`${sum}/${S.present.size}명`;markDirty();renderSet()}});
   renderSet();renderResult();
   $("dayMeta").textContent=S.role==="member"?"":S.savedId?"저장된 날":"새로 짜기"}
 function renderSet(){
-  const ps=activeProblems();const opts=sel=>`<option value="">— 고르기 —</option>`+["A","B","C","D"].filter(t=>ps.some(p=>p.type===t)).map(t=>`<optgroup label="${t}형">${ps.filter(p=>p.type===t).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(plabel(p))}</option>`).join("")}</optgroup>`).join("");
-  $("setRows").innerHTML=S.setIds.length?S.setIds.map((id,i)=>`<div class="setrow"><b>${i+1}</b><select data-si="${i}" aria-label="문제 ${i+1}">${opts(id)}</select></div>`).join(""):`<div class="empty">${ps.length?"문제를 추가하거나 '자동으로 고르기'를 눌러 주세요.":"'조원·질환' 탭에서 질환을 먼저 넣어 주세요."}</div>`;
+  const ps=activeProblems(),need=maxSize();
+  const opts=(t,sel)=>`<option value="">— 고르기 —</option>`+ps.filter(p=>p.type===t).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(plabel(p))}</option>`).join("");
+  $("setRows").innerHTML=ps.length?TYPES().map(t=>{const ids=setOf(t);
+    return `<div class="tsec" style="${tStyle(t)}"><div style="display:flex;align-items:center;gap:6px"><h3 style="margin-right:auto">${t}형 <span class="hint" style="font-weight:500">${ids.length}문제</span></h3>
+      <button class="btn sm ghost" type="button" data-tdel="${t}" aria-label="${t}형 하나 빼기">−</button><button class="btn sm" type="button" data-tadd="${t}" aria-label="${t}형 하나 추가">+</button></div>
+      ${ids.map(id=>`<select data-si="${S.setIds.indexOf(id)}" aria-label="${t}형 문제">${opts(t,id)}</select>`).join("")}
+      ${ids.length<need?`<div class="warn">${need}명 조가 있어서 ${t}형이 ${need}문제 필요해요. 모자라면 짤 때 자동으로 채워요.</div>`:""}</div>`}).join("")
+    :`<div class="empty">'조원·질환' 탭에서 질환을 먼저 넣어 주세요.</div>`;
   $("setRows").querySelectorAll("[data-si]").forEach(s=>s.onchange=()=>{S.setIds[Number(s.dataset.si)]=s.value;S.setIds=S.setIds.filter(Boolean);markDirty();renderSet()});
-  const need=maxSize();$("genBtn").textContent=S.draft?"🎲 다시 짜기":"🎲 조 · 문제 짜기";
-  if(S.setIds.length&&S.setIds.length<need)$("setRows").insertAdjacentHTML("beforeend",`<div class="warn">가장 큰 조가 ${need}명이라 문제가 ${need}개 필요해요. 짤 때 모자란 만큼 자동으로 채워요.</div>`)}
+  $("setRows").querySelectorAll("[data-tadd]").forEach(b=>b.onclick=()=>{const t=b.dataset.tadd;const k=setOf(t).length+1;const c=pickSetType(t,k);if(!c){toast(`더 넣을 ${t}형 질환이 없어요`);return}S.setIds.push(c);S.setIds=TYPES().flatMap(x=>setOf(x));markDirty();renderSet()});
+  $("setRows").querySelectorAll("[data-tdel]").forEach(b=>b.onclick=()=>{const ids=setOf(b.dataset.tdel);if(!ids.length)return;S.setIds.splice(S.setIds.lastIndexOf(ids[ids.length-1]),1);markDirty();renderSet()});
+  $("genBtn").textContent=S.draft?"🎲 다시 짜기":"🎲 조 · 문제 짜기"}
+/* 형 하나에 질환 하나 더(덜 해 본 순) */
+function pickSetType(t,k){const all=pickSet(k,S.setIds.filter(id=>prob(id).type===t));return all.find(id=>prob(id).type===t&&!S.setIds.includes(id))}
 function markDirty(){if(S.draft)S.dirty=true;renderStatus()}
 function renderStatus(){if(S.role==="member"){$("resStatus").innerHTML=S.savedId?`<button class="btn sm" type="button" id="copyDay">카톡용 복사</button>`:"";const cp=$("copyDay");if(cp)cp.onclick=copyDay;return}
   $("resStatus").innerHTML=!S.draft?"":S.dirty||!S.savedId?`<span class="tag draft">저장 안 됨</span><button class="btn sm primary" type="button" id="saveDay">저장</button>`:`<span class="tag saved">저장됨</span><button class="btn sm" type="button" id="copyDay">카톡용 복사</button>`;
   const sv=$("saveDay");if(sv)sv.onclick=saveDay;const cp=$("copyDay");if(cp)cp.onclick=copyDay}
 function renderResult(){
   $("resTitle").textContent=`${md(S.date)} 조 편성`;renderStatus();
-  const el=$("result");if(!S.draft||!S.draft.length){el.innerHTML=`<div class="empty">${S.role==="member"?"아직 조장이 이 날 조를 안 짰어요. 위 날짜 버튼(●)에서 저장된 날을 골라 보세요.":"왼쪽에서 날짜·인원·문제 세트를 정하고 '조 · 문제 짜기'를 눌러 주세요."}</div>`;return}
+  const el=$("result");if(!S.draft||!S.draft.length){el.innerHTML=`<div class="empty">${S.role==="member"?"아직 이 날 조가 안 짜였어요. 위 날짜 버튼(●)에서 저장된 날을 골라 보세요.":"왼쪽에서 날짜·인원·문제 세트를 정하고 '조 · 문제 짜기'를 눌러 주세요."}</div>`;return}
   const RO=S.role==="member";
   const saved=S.savedId&&!S.dirty;const day=dayOf(S.date);
   const present=[...S.present].map(mem).filter(Boolean);
-  const pOpts=sel=>{const ids=[...new Set([...S.setIds,sel])];return ids.map(id=>prob(id)).filter(Boolean).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(plabel(p))}</option>`).join("")+`<option value="__other">다른 질환…</option>`};
+  const pOpts=(t,sel)=>{const ids=[...new Set([...setOf(t),sel])];return ids.map(id=>prob(id)).filter(Boolean).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(plabel(p))}</option>`).join("")+`<option value="__other">다른 질환…</option>`};
   const mOpts=sel=>present.map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}</option>`).join("");
   let h="";const slots=[...new Set(S.draft.map(a=>a.slot))].sort();
   for(const s of slots){const skip=saved&&day&&(day.skipped||[]).includes(s);
     const rows=S.draft.filter(a=>a.slot===s);const grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);
     h+=`<div class="slot ${skip?"skip":""}"><div class="slot-h"><b>${s}타임</b>${saved&&!RO?`<label class="chk"><input type="checkbox" data-skip="${s}" ${skip?"checked":""}> 이 타임 안 함</label>`:""}</div><div class="groups">`;
-    for(const g of grps){const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);
-      h+=`<div class="grp"><div class="grp-h">${g}조 <span>${gr.length}명 · 1인 1문제 + 피드백 ${gr.length-1}번</span></div>`;
-      for(const a of gr){const i=S.draft.indexOf(a);
-        h+=RO?`<div class="arow"><i>${a.ord}</i><span class="atxt">${esc((mem(a.member_id)||{}).name||"?")}</span><span class="atxt">${pbadge(prob(a.problem_id))}</span>`
-          :`<div class="arow"><i>${a.ord}</i><select data-am="${i}" aria-label="${s}타임 ${g}조 ${a.ord}번 사람">${mOpts(a.member_id)}</select><select data-ap="${i}" aria-label="${s}타임 ${g}조 ${a.ord}번 문제">${pOpts(a.problem_id)}</select>`;
-        if(saved&&a.id)h+=`<div class="fb"><textarea data-fb="${a.id}" placeholder="${esc((mem(a.member_id)||{}).name||"")} 피드백 (조원들이 적어 주세요)" aria-label="피드백">${esc(a.feedback||"")}</textarea><span class="fbm" data-fbm="${a.id}"></span></div>`;
-        h+=`</div>`}
+    for(const g of grps){const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);const gm=grpMembers(gr);
+      h+=`<div class="grp"><div class="grp-h">${g}조 <span>${gm.length}명 · 형마다 1인 1문제 + 피드백 ${gm.length-1}번</span></div>`;
+      h+=RO?`<div class="gmem">${gm.map(m=>esc((mem(m)||{}).name||"?")).join(" · ")}</div>`
+        :`<div class="gmem">${gm.map(m=>`<select data-gm="${s}|${m}" aria-label="${s}타임 ${g}조 사람">${mOpts(m)}</select>`).join("")}</div>`;
+      const ts=[];gr.forEach(a=>{const t=(prob(a.problem_id)||{}).type||"?";if(!ts.includes(t))ts.push(t)});
+      for(const t of ts){h+=`<div class="trow" style="${tStyle(t)}">${t}형</div>`;
+        for(const a of gr.filter(x=>((prob(x.problem_id)||{}).type||"?")===t)){const i=S.draft.indexOf(a);
+          h+=`<div class="arow"><i></i><span class="atxt">${esc((mem(a.member_id)||{}).name||"?")}</span>`+(RO?`<span class="atxt">${pbadge(prob(a.problem_id))}</span>`:`<select data-ap="${i}" aria-label="${esc((mem(a.member_id)||{}).name||"")} ${t}형 문제">${pOpts(t,a.problem_id)}</select>`);
+          if(saved&&a.id)h+=`<div class="fb"><textarea data-fb="${a.id}" placeholder="${esc((mem(a.member_id)||{}).name||"")} · ${esc(pcode(prob(a.problem_id)))} 피드백" aria-label="피드백">${esc(a.feedback||"")}</textarea><span class="fbm" data-fbm="${a.id}"></span></div>`;
+          h+=`</div>`}}
       h+=`</div>`}
     h+=`</div></div>`}
   if(RO&&skipNote(day))h+=skipNote(day);
   if(S.savedId&&!RO)h+=`<div style="display:flex;justify-content:flex-end"><button class="btn sm ghost" type="button" id="delDay">이 날 기록 지우기</button></div>`;
-  if(!saved)h+=`<div class="hint">사람·문제를 직접 바꿀 수 있어요. 사람을 바꾸면 그 타임 안에서 서로 자리가 바뀌어요. 저장해야 피드백 칸이 열려요.</div>`;
+  if(!saved)h+=`<div class="hint">사람·문제를 직접 바꿀 수 있어요. 조 위쪽에서 사람을 바꾸면 그 타임 안에서 두 사람 자리가 통째로 바뀌어요. 저장해야 피드백 칸이 열려요.</div>`;
   el.innerHTML=h;
-  el.querySelectorAll("[data-am]").forEach(sel=>sel.onchange=()=>{const a=S.draft[Number(sel.dataset.am)],nv=sel.value;const other=S.draft.find(x=>x!==a&&x.slot===a.slot&&x.member_id===nv);if(other)other.member_id=a.member_id;a.member_id=nv;markDirty();renderResult()});
+  el.querySelectorAll("[data-gm]").forEach(sel=>sel.onchange=()=>{const [s,old]=sel.dataset.gm.split("|"),nv=sel.value,slot=Number(s);
+    S.draft.filter(a=>a.slot===slot).forEach(a=>{if(a.member_id===old)a.member_id="__tmp";else if(a.member_id===nv)a.member_id=old});
+    S.draft.filter(a=>a.member_id==="__tmp").forEach(a=>a.member_id=nv);markDirty();renderResult()});
   el.querySelectorAll("[data-ap]").forEach(sel=>sel.onchange=()=>{const a=S.draft[Number(sel.dataset.ap)];
     if(sel.value==="__other"){const ps=activeProblems();const pick=prompt("질환 번호를 적어 주세요 (예: a4, b2)\n"+ps.map(pcode).join(" "));const p=pick&&ps.find(x=>pcode(x)===pick.trim().toLowerCase());if(p)a.problem_id=p.id;else if(pick)toast("그 번호의 질환이 없어요")}
     else a.problem_id=sel.value;markDirty();renderResult()});
@@ -536,17 +556,24 @@ function validate(){if(S.present.size<2)return "나오는 사람을 2명 이상 
   if(!activeProblems().length)return "'조원·질환' 탭에서 질환을 먼저 넣어 주세요.";return ""}
 function doGenerate(){const v=validate();if(v){toast(v);return}
   if(S.savedId&&!confirm("저장된 조 편성을 새로 짤까요? (같은 사람·같은 문제로 남는 줄의 피드백은 유지돼요)"))return;
-  const need=maxSize();S.setIds=S.setIds.filter(id=>prob(id)&&prob(id).active);if(S.setIds.length<need)S.setIds=pickSet(need,S.setIds);
+  S.setIds=pickSet(maxSize(),S.setIds);
   S.draft=generate();S.dirty=true;renderSet();renderResult();toast("짰어요 · 마음에 들면 저장해 주세요")}
 async function saveDay(){const v=validate();if(v){toast(v);return}
-  for(let s=1;s<=S.slots;s++){const ids=S.draft.filter(a=>a.slot===s).map(a=>a.member_id);if(ids.length!==new Set(ids).size){toast(`${s}타임에 같은 사람이 두 번 있어요`);return}}
+  for(let s=1;s<=S.slots;s++){const rows=S.draft.filter(a=>a.slot===s);const k=rows.map(a=>a.member_id+"|"+(prob(a.problem_id)||{}).type);if(k.length!==new Set(k).size){toast(`${s}타임에 같은 사람이 같은 형을 두 번 풀어요`);return}
+    const byM={};rows.forEach(a=>(byM[a.member_id]=byM[a.member_id]||new Set()).add(a.grp));if(Object.values(byM).some(x=>x.size>1)){toast(`${s}타임에 한 사람이 두 조에 있어요`);return}}
   const slots=Math.max(...S.draft.map(a=>a.slot));
-  try{S.D=await api.saveDay(S.date,slots,S.setIds,S.draft.map(a=>({slot:a.slot,grp:a.grp,ord:a.ord,member_id:a.member_id,problem_id:a.problem_id})));loadDate(S.date);toast("저장했어요 · 피드백 칸이 열렸어요")}catch(e){toast(errText(e))}}
-function copyDay(){const d=dayOf(S.date);if(!d)return;const L=[`📋 ${md(S.date)} ${S.D.unit} 연습`,`문제: ${d.problem_set.map(id=>plabel(prob(id))).join(" · ")}`];
+  try{S.D=await api.saveDay(S.date,slots,S.setIds,S.draft.map(a=>({slot:a.slot,grp:a.grp,ord:a.ord,member_id:a.member_id,problem_id:a.problem_id})));S.D.logs=S.D.logs||[];loadDate(S.date);toast("저장했어요 · 피드백 칸이 열렸어요")}catch(e){toast(errText(e))}}
+function copyDay(){const d=dayOf(S.date);if(!d)return;const L=[`📋 ${md(S.date)} ${S.D.unit} 연습`];
+  for(const t of TYPES()){const ids=d.problem_set.filter(id=>(prob(id)||{}).type===t);if(ids.length)L.push(`${t}형: ${ids.map(id=>plabel(prob(id))).join(" · ")}`)}
   for(let s=1;s<=d.slots;s++){if((d.skipped||[]).includes(s))continue;L.push("",`[${s}타임]`);const rows=d.assigns.filter(a=>a.slot===s);
-    for(const g of [...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b))L.push(`${g}조: `+rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord).map(a=>`${(mem(a.member_id)||{}).name} ${pcode(prob(a.problem_id))}`).join(" → "))}
-  const txt=L.join("\n");(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast("복사했어요 · 카톡에 붙여 넣으세요"),()=>{prompt("아래 내용을 복사해 주세요",txt)})}
+    for(const g of [...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b)){const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);const gm=grpMembers(gr);
+      L.push(`${g}조 (${gm.map(m=>(mem(m)||{}).name).join("·")})`);
+      const ts=[];gr.forEach(a=>{const t=(prob(a.problem_id)||{}).type;if(!ts.includes(t))ts.push(t)});
+      for(const t of ts)L.push(`  ${t}: `+gr.filter(a=>(prob(a.problem_id)||{}).type===t).map(a=>`${(mem(a.member_id)||{}).name} ${pcode(prob(a.problem_id))}`).join(" · "))}}
+  const link=S.D.member_code?`\n피드백 쓰기: ${memberLink()}`:"";
+  const txt=L.join("\n")+link;(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast("복사했어요 · 카톡에 붙여 넣으세요"),()=>{prompt("아래 내용을 복사해 주세요",txt)})}
 const confirmLeave=()=>!(S.draft&&S.dirty)||confirm("저장 안 한 조 편성이 있어요. 버리고 이동할까요?");
+const memberLink=()=>`${location.origin}${location.pathname}?k=${encodeURIComponent(S.D.member_code||"")}`;
 
 /* ---------- 기록 ---------- */
 function renderStats(){
@@ -626,8 +653,6 @@ function setTab(t){if(S.role==="member"&&t==="setup")t="today";S.tab=t;document.
 document.querySelectorAll(".ptabs [data-tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 $("dateIn").onchange=()=>{if(!$("dateIn").value)return;if(!confirmLeave()){$("dateIn").value=S.date;return}loadDate($("dateIn").value)};
 $("setAuto").onclick=()=>{S.setIds=pickSet(Math.max(3,maxSize()));markDirty();renderSet()};
-$("setAdd").onclick=()=>{const ps=activeProblems().filter(p=>!S.setIds.includes(p.id));if(!ps.length){toast("더 넣을 질환이 없어요");return}S.setIds=pickSet(S.setIds.length+1,S.setIds);markDirty();renderSet()};
-$("setDel").onclick=()=>{S.setIds.pop();markDirty();renderSet()};
 $("genBtn").onclick=doGenerate;
 async function reload(){S.D=await api.load();S.D.days.forEach(d=>{d.assigns=d.assigns||[];d.skipped=d.skipped||[]});S.D.logs=S.D.logs||[]}
 $("reload").onclick=async()=>{if(!confirmLeave())return;try{await reload();if(S.tab==="today")loadDate(S.date);else setTab(S.tab);toast("새로 불러왔어요")}catch(e){toast(errText(e))}};
@@ -654,15 +679,18 @@ async function start(){
   $("unitName").textContent=`${S.D.unit==="DEMO"?"데모":S.D.unit} ${(S.D.teams||[]).length>1?`(${S.D.teams.join("·")}조 함께)`:"조"} 연습`;
   if(S.role!=="member"&&(!S.D.members.length||!S.D.problems.length))setTab("setup");else{setTab("today");loadDate(S.date)}}
 function renderMcode(){const el=$("mcode");if(S.role==="member"||!S.D.member_code){el.hidden=true;return}el.hidden=false;
-  el.innerHTML=`<span>조원 코드</span><b>${esc(S.D.member_code)}</b><span class="hint">조원들한테 공유하세요 · 연습 플랜만 들어가고 예약은 못 해요</span><button class="btn sm" type="button" id="mcCopy">복사</button><button class="btn sm ghost" type="button" id="mcNew">새로 만들기</button>`;
-  $("mcCopy").onclick=()=>{const t=`📋 ${S.D.unit} 연습 플랜\nosce-board.vercel.app/plan.html\n조원 코드: ${S.D.member_code}`;(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("복사했어요 · 단톡에 붙여 넣으세요"),()=>prompt("복사해 주세요",t))};
-  $("mcNew").onclick=async()=>{if(!confirm("조원 코드를 새로 만들까요? 예전 코드로는 더 이상 못 들어와요."))return;try{S.D.member_code=await api.resetCode();renderMcode();toast("새 조원 코드를 만들었어요")}catch(e){toast(errText(e))}}}
+  el.innerHTML=`<span>🔗 조원 링크</span><span class="hint">누르면 바로 들어와서 조 편성 보기·피드백 쓰기·기록 추가를 할 수 있어요 (예약은 못 해요)</span><button class="btn sm" type="button" id="mcCopy">링크 복사</button><button class="btn sm ghost" type="button" id="mcNew">새 링크</button>`;
+  $("mcCopy").onclick=()=>{const t=`📋 ${S.D.unit} 연습 플랜 (조 편성·피드백)\n${memberLink()}`;(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("복사했어요 · 단톡에 붙여 넣으세요"),()=>prompt("복사해 주세요",t))};
+  $("mcNew").onclick=async()=>{if(!confirm("조원 링크를 새로 만들까요? 예전 링크로는 더 이상 못 들어와요."))return;try{S.D.member_code=await api.resetCode();renderMcode();toast("새 링크를 만들었어요 · 다시 공유해 주세요")}catch(e){toast(errText(e))}}}
 $("codeGo").onclick=async()=>{const code=$("codeIn").value.trim();if(!code)return;$("gMsg").textContent="";
   try{const info=await api.login(code);if(!info){$("gMsg").textContent="코드가 맞지 않아요.";return}
     S.code=code.toUpperCase();S.role=info.role;S.team=info.team||"";
     if(info.role==="member")store("osce-prac-code",S.code);else{store("osce-code",S.code);store("osce-role",S.role);store("osce-team",S.team)}await enter()}catch(e){$("gMsg").textContent=errText(e)}};
 $("codeIn").onkeydown=e=>{if(e.key==="Enter"&&!e.isComposing&&e.keyCode!==229)$("codeGo").click()};
-(async()=>{S.code=store("osce-code")||store("osce-prac-code")||"";S.role=store("osce-code")?(store("osce-role")||""):"member";S.team=store("osce-code")?(store("osce-team")||""):"";
+(async()=>{
+  const k=new URLSearchParams(location.search).get("k");
+  if(k&&!store("osce-code")){try{const info=await api.login(k);if(info&&info.role==="member")store("osce-prac-code",k.trim().toUpperCase());else if(!info)toast("링크가 바뀌었어요. 조장한테 새 링크를 받아 주세요")}catch(e){}}
+  S.code=store("osce-code")||store("osce-prac-code")||"";S.role=store("osce-code")?(store("osce-role")||""):"member";S.team=store("osce-code")?(store("osce-team")||""):"";
   if(!S.code){showGate();return}
   try{const info=await api.login(S.code);if(!info){["osce-code","osce-role","osce-team","osce-prac-code"].forEach(k=>store(k,null));S.code="";showGate();return}S.role=info.role;S.team=info.team||"";await enter()}catch(e){showGate();$("gMsg").textContent=errText(e)}})();
 })();
