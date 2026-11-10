@@ -840,13 +840,13 @@ function planData(){const day=dayOf(S.date);const skipped=S.savedId&&!S.dirty&&d
     return {s,groups:[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b).map(g=>{const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);const ts=[];gr.forEach(a=>{const t=(prob(a.problem_id)||{}).type||"?";if(!ts.includes(t))ts.push(t)});
       return {g,members:grpMembers(gr).map(m=>(mem(m)||{}).name||"?"),types:ts.map(t=>({t,rows:gr.filter(a=>((prob(a.problem_id)||{}).type||"?")===t).map(a=>({name:(mem(a.member_id)||{}).name||"?",code:pcode(prob(a.problem_id)),kw:pkw(prob(a.problem_id)),cs:caseFor(a,S.date),sk:skillFor(a,S.date),label:plabel(prob(a.problem_id))}))}))}})}});
   return {title:`${md(S.date)} ${S.D.unit} 연습`,set:TYPES().map(t=>({t,items:S.setIds.filter(id=>(prob(id)||{}).type===t).map(id=>prob(id))})).filter(x=>x.items.length),slots}}
-function planText(){const P=planData();const GE=["🔵","🟠","🟣","🟢","🔴","🟡"],TE={A:"🟦",B:"🟧",C:"🟩",D:"🟪",E:"🟫"},NUM=["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣"],LINE="━━━━━━━━━━━━";
-  const L=[`📋 ${P.title}`];
-  for(const sl of P.slots){const tm=slotTime(sl.s);L.push("",LINE,`⏰ ${sl.s}타임${tm?` · ${tm}~`:""}`,LINE);
-    for(const g of sl.groups){L.push("",`${GE[(g.g-1)%GE.length]} ${g.g}조 | ${g.members.join(" · ")}`);
-      g.types.forEach((t,k)=>{L.push(`${NUM[k]||"▫️"} ${TE[t.t]||"▪️"} ${t.t}형`);
-        t.rows.forEach(r=>L.push(`   • ${r.name} ▸ ${r.cs?(r.sk?`${r.cs} → ${r.sk}`:r.cs):r.sk||r.kw}`))})}}
-  L.push("");if(S.D.member_code)L.push(`✍️ 피드백 쓰기 👉 ${memberLink()}`);return L.join("\n").replace(/\n+$/,"")}
+function planText(){const P=planData();const GE=["🔵","🟠","🟣","🟢","🔴","🟡"];
+  const L=[`🗓 ${P.title}`];
+  for(const sl of P.slots){const tm=slotTime(sl.s);L.push("",`⏰ ${sl.s}타임${tm?` ${tm}~`:""}`);
+    for(const g of sl.groups){const order=g.types.map(t=>t.t);L.push("",`${GE[(g.g-1)%GE.length]} ${g.g}조 · ${order.join("→")}`);
+      const who=[];g.types.forEach(t=>t.rows.forEach(r=>{if(!who.includes(r.name))who.push(r.name)}));
+      for(const n of who){const items=g.types.map(t=>{const r=t.rows.find(x=>x.name===n);return r?(r.cs?(r.sk?`${r.cs}(${r.sk})`:r.cs):r.sk||r.kw):"–"});L.push(`• ${n}: ${items.join(" / ")}`)}}}
+  if(S.D.member_code)L.push("",`✍️ 피드백 → ${memberLink()}`);return L.join("\n")}
 async function copyDay(){const txt=planText();
   if(navigator.share&&/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)){try{await navigator.share({text:txt});return}catch(e){if(e&&e.name==="AbortError")return}}
   (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast("복사했어요 · 카톡에 붙여 넣으세요"),()=>{prompt("아래 내용을 복사해 주세요",txt)})}
