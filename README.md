@@ -195,3 +195,9 @@ Supabase SQL Editor에서 `migrations/005_block_rooms.sql` 실행.
 - **기록 탭**: 사람별 직접/피드백 합계·비율, 질환별 내 기록(누르면 받은 피드백 목록), 전체 직접 횟수 표
 - 데이터: `prac_members` / `prac_problems` / `prac_days` / `prac_assign` (테이블 직접 읽기 불가, `prac_*` RPC + 조장/관리자 코드). 묶음 단위 공유(1A+1B, 3A·3B·3C)
 - 사용 범위: 1–4일차 조장 (`rule_cfg.prac_max_day`, 기본 4) + 관리자(묶음 선택). 예약판 '연습 플랜' 탭도 이 조건일 때만 보임, 현황판에서는 탭 제거
+
+## 업데이트 026: 조원 코드 (Supabase 적용 완료)
+- 연습 플랜 전용 조원 코드 (`prac_codes`, 묶음마다 1개). 예약판에선 안 먹힘
+- 조원 코드: 조 편성 보기 · 피드백 쓰기 · 기록 보기 · 카톡용 복사. 조원·질환 수정, 조 짜기·저장, 안 함, 기록 지우기는 조장/관리자만
+- 조장·관리자는 연습 플랜 맨 위에서 조원 코드 확인·복사·새로 만들기 (`prac_reset_code`)
+- 로그인: `prac_auth` (조원 코드 → member, 아니면 기존 auth_code). 조원 코드는 `osce-prac-code`에 따로 저장

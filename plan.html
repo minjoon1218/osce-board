@@ -171,6 +171,12 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .chk{display:inline-flex;align-items:center;gap:5px;font-size:.78rem;color:var(--muted);white-space:nowrap}
 .chk input{width:auto}
 textarea.bulk{width:100%;min-height:90px;border:1px solid var(--line-strong);border-radius:9px;padding:8px 10px;font:inherit;font-size:.86rem;background:var(--surface);color:var(--fg)}
+.mcode{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px dashed var(--accent);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:.84rem;background:var(--accent-soft)}
+.mcode b{font-family:var(--t-mono);font-size:1.05rem;letter-spacing:.12em;color:var(--accent-ink)}
+.mcode .hint{margin-right:auto}
+body.member .lead{display:none!important}
+body.member .ptabs{grid-template-columns:repeat(2,1fr)}
+.atxt{font-size:.88rem;font-weight:600;min-width:0}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.86rem;font-weight:500;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 @media (max-width:440px){.brand h1{display:none}}
@@ -189,9 +195,9 @@ textarea.bulk{width:100%;min-height:90px;border:1px solid var(--line-strong);bor
 
 <main class="page">
   <section class="card" id="gate" hidden style="max-width:440px;margin:24px auto">
-    <div class="card-h"><h2>조 코드로 들어오기</h2></div>
+    <div class="card-h"><h2>코드로 들어오기</h2></div>
     <div class="card-b">
-      <p class="hint" style="margin:0">연습 플랜은 같은 조끼리 기록을 함께 봐요. 예약판 조장 코드를 넣어 주세요. 조원들도 이 코드로 들어오면 같은 기록을 볼 수 있어요.</p>
+      <p class="hint" style="margin:0">조원은 조장한테 받은 <b>조원 코드</b>, 조장은 예약판 <b>조장 코드</b>를 넣어 주세요. 조원 코드로는 조 편성 보기·피드백 쓰기·기록 보기를 할 수 있어요.</p>
       <input class="codein" id="codeIn" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="코드" aria-label="코드">
       <div class="msg err" id="gMsg"></div>
       <button class="btn primary" type="button" id="codeGo">들어가기</button>
@@ -203,6 +209,7 @@ textarea.bulk{width:100%;min-height:90px;border:1px solid var(--line-strong);bor
   </section>
 
   <div id="app" hidden>
+    <div class="mcode lead" id="mcode" hidden></div>
     <div class="toprow">
       <span class="unitname" id="unitName"></span>
       <select id="unitSel" hidden aria-label="묶음 고르기"></select>
@@ -210,7 +217,7 @@ textarea.bulk{width:100%;min-height:90px;border:1px solid var(--line-strong);bor
       <div class="ptabs" role="tablist">
         <button type="button" role="tab" data-tab="today" aria-selected="true">오늘 연습</button>
         <button type="button" role="tab" data-tab="stats" aria-selected="false">기록</button>
-        <button type="button" role="tab" data-tab="setup" aria-selected="false">조원·질환</button>
+        <button type="button" role="tab" data-tab="setup" aria-selected="false" class="lead">조원·질환</button>
       </div>
     </div>
 
@@ -223,13 +230,13 @@ textarea.bulk{width:100%;min-height:90px;border:1px solid var(--line-strong);bor
             <label class="field"><span>날짜</span><input type="date" id="dateIn"></label>
             <div class="chips" id="savedDays"></div>
             <div class="bk" id="bkList"></div>
-            <div class="field"><span>오늘 나오는 사람 <em id="presentN" style="font-style:normal"></em></span><div class="chips" id="presentChips"></div></div>
-            <div class="field"><span>타임 수</span><div class="seg3" id="slotSeg"></div></div>
-            <div class="field"><span>조 나누기 (타임마다 · 쉼표로 인원)</span><div class="sizes" id="sizes"></div>
+            <div class="field lead"><span>오늘 나오는 사람 <em id="presentN" style="font-style:normal"></em></span><div class="chips" id="presentChips"></div></div>
+            <div class="field lead"><span>타임 수</span><div class="seg3" id="slotSeg"></div></div>
+            <div class="field lead"><span>조 나누기 (타임마다 · 쉼표로 인원)</span><div class="sizes" id="sizes"></div>
               <span class="hint">예: 10명 → 3,3,4. 조 안에서는 1인 1문제씩 풀고, 나머지 사람이 피드백해요.</span></div>
           </div>
         </section>
-        <section class="card">
+        <section class="card lead">
           <div class="card-h"><h2>그날 문제 세트</h2><button class="btn sm" type="button" id="setAuto">자동으로 고르기</button></div>
           <div class="card-b">
             <div id="setRows" style="display:grid;gap:6px"></div>
@@ -237,7 +244,7 @@ textarea.bulk{width:100%;min-height:90px;border:1px solid var(--line-strong);bor
             <span class="hint">모든 조가 같은 세트로 연습해요. 자동은 A·B·C 한 문제씩(조원들이 덜 해 본 질환), 4명 조가 있으면 한 문제 더 골라요.</span>
           </div>
         </section>
-        <button class="btn primary" type="button" id="genBtn" style="padding:11px">🎲 조 · 문제 짜기</button>
+        <button class="btn primary lead" type="button" id="genBtn" style="padding:11px">🎲 조 · 문제 짜기</button>
       </div>
       <div class="col">
         <section class="card">
@@ -324,11 +331,12 @@ const demo={
       d={members:ms,problems:ps,days:[]}}
     return d},
   save(d){store("osce-prac-demo",JSON.stringify(d))},
-  out(d){return {unit:"DEMO",teams:["C"],members:d.members,problems:d.problems,days:d.days}}
+  out(d){return {unit:"DEMO",teams:["C"],role:S.role==="member"?"member":"leader",member_code:S.role==="member"?null:"DEMO-M",members:d.members,problems:d.problems,days:d.days}}
 };
 const api={
-  async login(code){if(!LIVE){const u=String(code).trim().toUpperCase();if(u==="DEMO-ADMIN")return {role:"admin",team:null};const m=u.match(/^DEMO-([A-H])$/);return m?{role:"leader",team:m[1]}:null}
-    return await rpc("auth_code",{p_code:code})},
+  async login(code){if(!LIVE){const u=String(code).trim().toUpperCase();if(u==="DEMO-ADMIN")return {role:"admin",team:null};if(u==="DEMO-M")return {role:"member",team:null,unit:"DEMO"};const m=u.match(/^DEMO-([A-H])$/);return m?{role:"leader",team:m[1]}:null}
+    return await rpc("prac_auth",{p_code:code})},
+  async resetCode(){if(!LIVE)return "DEMO-M";return await rpc("prac_reset_code",{p_code:S.code,p_unit:unitArg()})},
   async rules(){if(!LIVE)return [{team:"C",unit:"C",exam_day:3},{team:"H",unit:"H",exam_day:9}];try{return await rpc("list_team_rules",{})}catch(e){return []}},
   async load(){if(!LIVE){if(S.team==="H")throw new Error("PRAC_CLOSED");return demo.out(demo.db())}return await rpc("prac_load",{p_code:S.code,p_unit:unitArg()})},
   async saveMembers(items){if(!LIVE){const d=demo.db();const keep=items.map((x,i)=>{const id=x.id||("m"+Date.now()+i);return {id,name:x.name,active:x.active!==false,sort:x.sort}});
@@ -351,7 +359,7 @@ const api={
 };
 function errText(e){const m=String(e&&e.message||e);
   if(m.includes("PRAC_CLOSED"))return "연습 플랜은 지금 1–4일차 조만 쓸 수 있어요.";
-  if(m.includes("NOT_LEADER"))return "코드가 맞지 않아요.";
+  if(m.includes("NOT_LEADER"))return S.role==="member"?"조장 코드로만 할 수 있어요.":"코드가 맞지 않아요.";
   if(m.includes("BAD_TEAM"))return "묶음을 골라 주세요.";
   if(m.includes("BAD_ITEM"))return "조원이나 질환 목록이 바뀌었어요. 새로고침 후 다시 해 주세요.";
   if(m.includes("duplicate key")||m.includes("unique"))return "같은 형에 같은 번호가 두 번 있어요.";
@@ -437,6 +445,7 @@ function loadDate(date){
   if(d){S.savedId=d.id;S.slots=d.slots;S.setIds=d.problem_set.slice();S.draft=d.assigns.map(a=>({...a}));S.dirty=false;
     S.present=new Set(d.assigns.map(a=>a.member_id));S.sizes={};
     for(let s=1;s<=d.slots;s++){const g={};d.assigns.filter(a=>a.slot===s).forEach(a=>g[a.grp]=(g[a.grp]||0)+1);S.sizes[s]=Object.keys(g).sort((a,b)=>a-b).map(k=>g[k]).join(",")}}
+  else if(S.role==="member"){S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set();S.setIds=[]}
   else{S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set(activeMembers().map(m=>m.id));S.slots=S.slots||2;S.sizes={};S.setIds=pickSet(Math.max(3,maxSize()))}
   renderToday();loadBookings()}
 async function loadBookings(){const el=$("bkList");el.innerHTML="";const list=await api.bookings(S.date,S.D.teams||[]);
@@ -459,7 +468,7 @@ function renderToday(){
   $("sizes").innerHTML=sz;
   $("sizes").querySelectorAll("[data-sz]").forEach(i=>{i.oninput=()=>{S.sizes[i.dataset.sz]=i.value;const sum=parseSizes(i.value).reduce((a,b)=>a+b,0);i.parentElement.classList.toggle("bad",sum!==S.present.size);i.parentElement.querySelector(".hint").textContent=`${sum}/${S.present.size}명`;markDirty()}});
   renderSet();renderResult();
-  $("dayMeta").textContent=S.savedId?"저장된 날":"새로 짜기"}
+  $("dayMeta").textContent=S.role==="member"?"":S.savedId?"저장된 날":"새로 짜기"}
 function renderSet(){
   const ps=activeProblems();const opts=sel=>`<option value="">— 고르기 —</option>`+["A","B","C","D"].filter(t=>ps.some(p=>p.type===t)).map(t=>`<optgroup label="${t}형">${ps.filter(p=>p.type===t).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(plabel(p))}</option>`).join("")}</optgroup>`).join("");
   $("setRows").innerHTML=S.setIds.length?S.setIds.map((id,i)=>`<div class="setrow"><b>${i+1}</b><select data-si="${i}" aria-label="문제 ${i+1}">${opts(id)}</select></div>`).join(""):`<div class="empty">${ps.length?"문제를 추가하거나 '자동으로 고르기'를 눌러 주세요.":"'조원·질환' 탭에서 질환을 먼저 넣어 주세요."}</div>`;
@@ -467,11 +476,13 @@ function renderSet(){
   const need=maxSize();$("genBtn").textContent=S.draft?"🎲 다시 짜기":"🎲 조 · 문제 짜기";
   if(S.setIds.length&&S.setIds.length<need)$("setRows").insertAdjacentHTML("beforeend",`<div class="warn">가장 큰 조가 ${need}명이라 문제가 ${need}개 필요해요. 짤 때 모자란 만큼 자동으로 채워요.</div>`)}
 function markDirty(){if(S.draft)S.dirty=true;renderStatus()}
-function renderStatus(){$("resStatus").innerHTML=!S.draft?"":S.dirty||!S.savedId?`<span class="tag draft">저장 안 됨</span><button class="btn sm primary" type="button" id="saveDay">저장</button>`:`<span class="tag saved">저장됨</span><button class="btn sm" type="button" id="copyDay">카톡용 복사</button>`;
+function renderStatus(){if(S.role==="member"){$("resStatus").innerHTML=S.savedId?`<button class="btn sm" type="button" id="copyDay">카톡용 복사</button>`:"";const cp=$("copyDay");if(cp)cp.onclick=copyDay;return}
+  $("resStatus").innerHTML=!S.draft?"":S.dirty||!S.savedId?`<span class="tag draft">저장 안 됨</span><button class="btn sm primary" type="button" id="saveDay">저장</button>`:`<span class="tag saved">저장됨</span><button class="btn sm" type="button" id="copyDay">카톡용 복사</button>`;
   const sv=$("saveDay");if(sv)sv.onclick=saveDay;const cp=$("copyDay");if(cp)cp.onclick=copyDay}
 function renderResult(){
   $("resTitle").textContent=`${md(S.date)} 조 편성`;renderStatus();
-  const el=$("result");if(!S.draft||!S.draft.length){el.innerHTML=`<div class="empty">왼쪽에서 날짜·인원·문제 세트를 정하고 '조 · 문제 짜기'를 눌러 주세요.</div>`;return}
+  const el=$("result");if(!S.draft||!S.draft.length){el.innerHTML=`<div class="empty">${S.role==="member"?"아직 조장이 이 날 조를 안 짰어요. 위 날짜 버튼(●)에서 저장된 날을 골라 보세요.":"왼쪽에서 날짜·인원·문제 세트를 정하고 '조 · 문제 짜기'를 눌러 주세요."}</div>`;return}
+  const RO=S.role==="member";
   const saved=S.savedId&&!S.dirty;const day=dayOf(S.date);
   const present=[...S.present].map(mem).filter(Boolean);
   const pOpts=sel=>{const ids=[...new Set([...S.setIds,sel])];return ids.map(id=>prob(id)).filter(Boolean).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(plabel(p))}</option>`).join("")+`<option value="__other">다른 질환…</option>`};
@@ -479,16 +490,18 @@ function renderResult(){
   let h="";const slots=[...new Set(S.draft.map(a=>a.slot))].sort();
   for(const s of slots){const skip=saved&&day&&(day.skipped||[]).includes(s);
     const rows=S.draft.filter(a=>a.slot===s);const grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);
-    h+=`<div class="slot ${skip?"skip":""}"><div class="slot-h"><b>${s}타임</b>${saved?`<label class="chk"><input type="checkbox" data-skip="${s}" ${skip?"checked":""}> 이 타임 안 함</label>`:""}</div><div class="groups">`;
+    h+=`<div class="slot ${skip?"skip":""}"><div class="slot-h"><b>${s}타임</b>${saved&&!RO?`<label class="chk"><input type="checkbox" data-skip="${s}" ${skip?"checked":""}> 이 타임 안 함</label>`:""}</div><div class="groups">`;
     for(const g of grps){const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);
       h+=`<div class="grp"><div class="grp-h">${g}조 <span>${gr.length}명 · 1인 1문제 + 피드백 ${gr.length-1}번</span></div>`;
       for(const a of gr){const i=S.draft.indexOf(a);
-        h+=`<div class="arow"><i>${a.ord}</i><select data-am="${i}" aria-label="${s}타임 ${g}조 ${a.ord}번 사람">${mOpts(a.member_id)}</select><select data-ap="${i}" aria-label="${s}타임 ${g}조 ${a.ord}번 문제">${pOpts(a.problem_id)}</select>`;
+        h+=RO?`<div class="arow"><i>${a.ord}</i><span class="atxt">${esc((mem(a.member_id)||{}).name||"?")}</span><span class="atxt">${pbadge(prob(a.problem_id))}</span>`
+          :`<div class="arow"><i>${a.ord}</i><select data-am="${i}" aria-label="${s}타임 ${g}조 ${a.ord}번 사람">${mOpts(a.member_id)}</select><select data-ap="${i}" aria-label="${s}타임 ${g}조 ${a.ord}번 문제">${pOpts(a.problem_id)}</select>`;
         if(saved&&a.id)h+=`<div class="fb"><textarea data-fb="${a.id}" placeholder="${esc((mem(a.member_id)||{}).name||"")} 피드백 (조원들이 적어 주세요)" aria-label="피드백">${esc(a.feedback||"")}</textarea><span class="fbm" data-fbm="${a.id}"></span></div>`;
         h+=`</div>`}
       h+=`</div>`}
     h+=`</div></div>`}
-  if(S.savedId)h+=`<div style="display:flex;justify-content:flex-end"><button class="btn sm ghost" type="button" id="delDay">이 날 기록 지우기</button></div>`;
+  if(RO&&skipNote(day))h+=skipNote(day);
+  if(S.savedId&&!RO)h+=`<div style="display:flex;justify-content:flex-end"><button class="btn sm ghost" type="button" id="delDay">이 날 기록 지우기</button></div>`;
   if(!saved)h+=`<div class="hint">사람·문제를 직접 바꿀 수 있어요. 사람을 바꾸면 그 타임 안에서 서로 자리가 바뀌어요. 저장해야 피드백 칸이 열려요.</div>`;
   el.innerHTML=h;
   el.querySelectorAll("[data-am]").forEach(sel=>sel.onchange=()=>{const a=S.draft[Number(sel.dataset.am)],nv=sel.value;const other=S.draft.find(x=>x!==a&&x.slot===a.slot&&x.member_id===nv);if(other)other.member_id=a.member_id;a.member_id=nv;markDirty();renderResult()});
@@ -500,6 +513,7 @@ function renderResult(){
     t.onblur=go;let tm;t.oninput=()=>{clearTimeout(tm);tm=setTimeout(go,1500)}});
   el.querySelectorAll("[data-skip]").forEach(c=>c.onchange=async()=>{try{await api.skip(day.id,Number(c.dataset.skip),c.checked);day.skipped=c.checked?[...new Set([...(day.skipped||[]),Number(c.dataset.skip)])]:(day.skipped||[]).filter(x=>x!==Number(c.dataset.skip));renderResult();toast(c.checked?"이 타임은 기록에서 빠져요":"다시 기록에 넣었어요")}catch(e){toast(errText(e))}});
   const dd=$("delDay");if(dd)dd.onclick=async()=>{if(!confirm(`${md(S.date)} 조 편성과 피드백을 지울까요?`))return;try{await api.delDay(S.savedId);await reload();loadDate(S.date);toast("지웠어요")}catch(e){toast(errText(e))}}}
+const skipNote=d=>d&&(d.skipped||[]).length?`<div class="hint">${d.skipped.join("·")}타임은 '안 함'으로 표시돼 기록에서 빠져요.</div>`:"";
 function validate(){if(S.present.size<2)return "나오는 사람을 2명 이상 골라 주세요.";
   for(let s=1;s<=S.slots;s++){const sum=parseSizes(S.sizes[s]??autoSizes(S.present.size).join(",")).reduce((a,b)=>a+b,0);if(sum!==S.present.size)return `${s}타임 조 인원 합(${sum})이 나오는 사람 수(${S.present.size})와 달라요.`}
   if(!activeProblems().length)return "'조원·질환' 탭에서 질환을 먼저 넣어 주세요.";return ""}
@@ -572,7 +586,7 @@ $("bulkGo").onclick=()=>{let n=0,bad=[];for(const line of $("bulkIn").value.spli
   renderSetup();$("probMsg").className=bad.length?"msg err":"msg";$("probMsg").textContent=`${n}개 넣었어요${bad.length?` · 못 읽은 줄: ${bad.slice(0,3).join(" / ")}`:""} · 저장을 눌러야 반영돼요`;if(!bad.length)$("bulkIn").value=""};
 
 /* ---------- 탭 · 시작 ---------- */
-function setTab(t){S.tab=t;document.querySelectorAll(".ptabs [data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
+function setTab(t){if(S.role==="member"&&t==="setup")t="today";S.tab=t;document.querySelectorAll(".ptabs [data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
   ["today","stats","setup"].forEach(x=>$("tab-"+x).hidden=x!==t);if(t==="stats")renderStats();if(t==="setup")setupInit();if(t==="today")renderToday()}
 document.querySelectorAll(".ptabs [data-tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 $("dateIn").onchange=()=>{if(!$("dateIn").value)return;if(!confirmLeave()){$("dateIn").value=S.date;return}loadDate($("dateIn").value)};
@@ -588,8 +602,8 @@ window.addEventListener("beforeunload",e=>{if(S.draft&&S.dirty){e.preventDefault
 function syncThemeBtn(){const dark=document.documentElement.getAttribute("data-theme")==="dark";$("themeBtn").textContent=dark?"☀":"☾";$("themeBtn").setAttribute("aria-label",dark?"밝은 모드로 바꾸기":"다크 모드로 바꾸기")}
 $("themeBtn").onclick=()=>{const next=document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark";document.documentElement.setAttribute("data-theme",next);store("osce-theme",next);syncThemeBtn()};syncThemeBtn();
 function renderAuth(){const el=$("authSlot");if(!S.code){el.innerHTML="";return}
-  el.innerHTML=`<button class="who" type="button" id="whoBtn"><span class="dot">${S.role==="admin"?"★":esc((S.team||"?").slice(0,2))}</span>${S.role==="admin"?"관리자":esc(S.team)+"조"}</button>`;
-  $("whoBtn").onclick=()=>{if(!confirm("로그아웃할까요? (예약판도 같이 로그아웃돼요)"))return;["osce-code","osce-role","osce-team"].forEach(k=>store(k,null));location.reload()}}
+  el.innerHTML=`<button class="who" type="button" id="whoBtn"><span class="dot">${S.role==="admin"?"★":S.role==="member"?"👥":esc((S.team||"?").slice(0,2))}</span>${S.role==="admin"?"관리자":S.role==="member"?"조원":esc(S.team)+"조"}</button>`;
+  $("whoBtn").onclick=()=>{if(!confirm(S.role==="member"?"로그아웃할까요?":"로그아웃할까요? (예약판도 같이 로그아웃돼요)"))return;(S.role==="member"?["osce-prac-code"]:["osce-code","osce-role","osce-team"]).forEach(k=>store(k,null));location.reload()}}
 function showGate(){$("gate").hidden=false;$("app").hidden=true;$("closed").hidden=true;renderAuth();setTimeout(()=>$("codeIn").focus(),50)}
 async function enter(){
   renderAuth();$("gate").hidden=true;
@@ -601,15 +615,21 @@ async function enter(){
 async function start(){
   try{await reload()}catch(e){if(String(e.message).includes("PRAC_CLOSED")){$("closed").hidden=false;$("app").hidden=true;return}toast(errText(e));$("app").hidden=true;return}
   $("closed").hidden=true;$("app").hidden=false;
+  if(S.D.role==="member")S.role="member";document.body.classList.toggle("member",S.role==="member");renderMcode();
   $("unitName").textContent=`${S.D.unit==="DEMO"?"데모":S.D.unit} ${(S.D.teams||[]).length>1?`(${S.D.teams.join("·")}조 함께)`:"조"} 연습`;
-  if(!S.D.members.length||!S.D.problems.length)setTab("setup");else{setTab("today");loadDate(S.date)}}
+  if(S.role!=="member"&&(!S.D.members.length||!S.D.problems.length))setTab("setup");else{setTab("today");loadDate(S.date)}}
+function renderMcode(){const el=$("mcode");if(S.role==="member"||!S.D.member_code){el.hidden=true;return}el.hidden=false;
+  el.innerHTML=`<span>조원 코드</span><b>${esc(S.D.member_code)}</b><span class="hint">조원들한테 공유하세요 · 연습 플랜만 들어가고 예약은 못 해요</span><button class="btn sm" type="button" id="mcCopy">복사</button><button class="btn sm ghost" type="button" id="mcNew">새로 만들기</button>`;
+  $("mcCopy").onclick=()=>{const t=`📋 ${S.D.unit} 연습 플랜\nosce-board.vercel.app/plan.html\n조원 코드: ${S.D.member_code}`;(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("복사했어요 · 단톡에 붙여 넣으세요"),()=>prompt("복사해 주세요",t))};
+  $("mcNew").onclick=async()=>{if(!confirm("조원 코드를 새로 만들까요? 예전 코드로는 더 이상 못 들어와요."))return;try{S.D.member_code=await api.resetCode();renderMcode();toast("새 조원 코드를 만들었어요")}catch(e){toast(errText(e))}}}
 $("codeGo").onclick=async()=>{const code=$("codeIn").value.trim();if(!code)return;$("gMsg").textContent="";
   try{const info=await api.login(code);if(!info){$("gMsg").textContent="코드가 맞지 않아요.";return}
-    S.code=code.toUpperCase();S.role=info.role;S.team=info.team||"";store("osce-code",S.code);store("osce-role",S.role);store("osce-team",S.team);await enter()}catch(e){$("gMsg").textContent=errText(e)}};
+    S.code=code.toUpperCase();S.role=info.role;S.team=info.team||"";
+    if(info.role==="member")store("osce-prac-code",S.code);else{store("osce-code",S.code);store("osce-role",S.role);store("osce-team",S.team)}await enter()}catch(e){$("gMsg").textContent=errText(e)}};
 $("codeIn").onkeydown=e=>{if(e.key==="Enter")$("codeGo").click()};
-(async()=>{S.code=store("osce-code")||"";S.role=store("osce-role")||"";S.team=store("osce-team")||"";
+(async()=>{S.code=store("osce-code")||store("osce-prac-code")||"";S.role=store("osce-code")?(store("osce-role")||""):"member";S.team=store("osce-code")?(store("osce-team")||""):"";
   if(!S.code){showGate();return}
-  try{const info=await api.login(S.code);if(!info){["osce-code","osce-role","osce-team"].forEach(k=>store(k,null));S.code="";showGate();return}S.role=info.role;S.team=info.team||"";await enter()}catch(e){showGate();$("gMsg").textContent=errText(e)}})();
+  try{const info=await api.login(S.code);if(!info){["osce-code","osce-role","osce-team","osce-prac-code"].forEach(k=>store(k,null));S.code="";showGate();return}S.role=info.role;S.team=info.team||"";await enter()}catch(e){showGate();$("gMsg").textContent=errText(e)}})();
 })();
 </script>
 </body>
