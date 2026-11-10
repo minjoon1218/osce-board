@@ -177,6 +177,12 @@ textarea.bulk{width:100%;min-height:90px;border:1px solid var(--line-strong);bor
 body.member .lead{display:none!important}
 body.member .ptabs{grid-template-columns:repeat(2,1fr)}
 .atxt{font-size:.88rem;font-weight:600;min-width:0}
+.addlog{border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px;background:var(--sunk)}
+.addlog .two{gap:6px}
+.addlog textarea,.fbitem textarea{width:100%;min-height:56px;resize:vertical;border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;font:inherit;font-size:.86rem;background:var(--surface);color:var(--fg)}
+.fbitem .fbh{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.fbitem .fbh small{margin-right:auto}
+.kind{font-size:.68rem;font-weight:700;border-radius:99px;padding:0 7px;background:var(--surface);color:var(--muted);border:1px solid var(--line-strong)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.86rem;font-weight:500;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 @media (max-width:440px){.brand h1{display:none}}
@@ -331,7 +337,7 @@ const demo={
       d={members:ms,problems:ps,days:[]}}
     return d},
   save(d){store("osce-prac-demo",JSON.stringify(d))},
-  out(d){return {unit:"DEMO",teams:["C"],role:S.role==="member"?"member":"leader",member_code:S.role==="member"?null:"DEMO-M",members:d.members,problems:d.problems,days:d.days}}
+  out(d){return {unit:"DEMO",teams:["C"],role:S.role==="member"?"member":"leader",member_code:S.role==="member"?null:"DEMO-M",members:d.members,problems:d.problems,days:d.days,logs:d.logs||[]}}
 };
 const api={
   async login(code){if(!LIVE){const u=String(code).trim().toUpperCase();if(u==="DEMO-ADMIN")return {role:"admin",team:null};if(u==="DEMO-M")return {role:"member",team:null,unit:"DEMO"};const m=u.match(/^DEMO-([A-H])$/);return m?{role:"leader",team:m[1]}:null}
@@ -353,6 +359,12 @@ const api={
     return await rpc("prac_feedback",{p_code:S.code,p_unit:unitArg(),p_id:id,p_text:text})},
   async skip(dayId,slot,on){if(!LIVE){const d=demo.db();const y=d.days.find(x=>x.id===dayId);if(y){y.skipped=on?[...new Set([...y.skipped,slot])]:y.skipped.filter(s=>s!==slot)}demo.save(d);return true}
     return await rpc("prac_skip",{p_code:S.code,p_unit:unitArg(),p_day:dayId,p_slot:slot,p_skip:on})},
+  async addLog(date,member,problem,fb,obs){if(!LIVE){const d=demo.db();d.logs=d.logs||[];d.logs.push({id:"l"+Date.now(),date,member_id:member,problem_id:problem,feedback:fb,observers:obs.filter(o=>o!==member),created_at:new Date().toISOString()});demo.save(d);return demo.out(d)}
+    return await rpc("prac_add_log",{p_code:S.code,p_unit:unitArg(),p_date:date,p_member:member,p_problem:problem,p_feedback:fb,p_observers:obs})},
+  async editLog(id,fb){if(!LIVE){const d=demo.db();(d.logs||[]).forEach(l=>{if(l.id===id)l.feedback=fb});demo.save(d);return true}
+    return await rpc("prac_edit_log",{p_code:S.code,p_unit:unitArg(),p_id:id,p_feedback:fb})},
+  async delLog(id){if(!LIVE){const d=demo.db();d.logs=(d.logs||[]).filter(l=>l.id!==id);demo.save(d);return true}
+    return await rpc("prac_delete_log",{p_code:S.code,p_unit:unitArg(),p_id:id})},
   async delDay(dayId){if(!LIVE){const d=demo.db();d.days=d.days.filter(x=>x.id!==dayId);demo.save(d);return true}
     return await rpc("prac_delete_day",{p_code:S.code,p_unit:unitArg(),p_day:dayId})},
   async bookings(date,teams){if(!LIVE)return [];try{const {data}=await sb.from("bookings").select("room,start_min,end_min,team").eq("date",date).in("team",teams).order("start_min");return data||[]}catch(e){return []}}
@@ -377,7 +389,7 @@ const plabel=p=>p?`${pcode(p)} ${p.name}`.trim():"(지운 질환)";
 const pbadge=p=>p?`<span class="tbadge" style="${tStyle(p.type)}">${esc(pcode(p))}</span>${esc(p.name)}`:"(지운 질환)";
 const dayOf=date=>S.D.days.find(d=>d.date===date);
 /* 기록 집계: filter(day) 통과한 날, 안 함 타임 제외 */
-function tally(filter){
+function tally(filter,logFilter){
   const T={solve:{},fb:{},pair:{},big:{},sol:{},fbn:{},last:{}};
   const inc=(o,k,n=1)=>{o[k]=(o[k]||0)+n};const inc2=(o,a,b)=>{(o[a]=o[a]||{});o[a][b]=(o[a][b]||0)+1};
   for(const d of S.D.days){if(!filter(d))continue;
@@ -389,6 +401,11 @@ function tally(filter){
           if(grp.length>mn)inc(T.big,a.member_id);
           for(const o of grp)if(o.member_id!==a.member_id){inc2(T.fb,o.member_id,a.problem_id);inc(T.fbn,o.member_id)}}
         for(let i=0;i<grp.length;i++)for(let j=i+1;j<grp.length;j++)inc(T.pair,[grp[i].member_id,grp[j].member_id].sort().join("|"))}}}
+  /* 기록 탭에서 직접 추가한 연습: 푼 사람 직접 1회, 같이 본 사람 피드백 1회 */
+  for(const l of S.D.logs||[]){if(logFilter&&!logFilter(l))continue;
+    inc2(T.solve,l.member_id,l.problem_id);inc(T.sol,l.member_id);const lt=(T.last[l.member_id]=T.last[l.member_id]||{});if(!lt[l.problem_id]||lt[l.problem_id]<l.date)lt[l.problem_id]=l.date;
+    const obs=(l.observers||[]).filter(o=>o!==l.member_id);for(const o of obs){inc2(T.fb,o,l.problem_id);inc(T.fbn,o)}
+    const all=[l.member_id,...obs];for(let i=0;i<all.length;i++)for(let j=i+1;j<all.length;j++)inc(T.pair,[all[i],all[j]].sort().join("|"))}
   return T}
 const g2=(o,a,b)=>(o[a]&&o[a][b])||0;
 
@@ -533,8 +550,8 @@ const confirmLeave=()=>!(S.draft&&S.dirty)||confirm("저장 안 한 조 편성�
 
 /* ---------- 기록 ---------- */
 function renderStats(){
-  const T=tally(d=>d.date<=ymd());const ms=S.D.members.filter(m=>m.active||T.sol[m.id]||T.fbn[m.id]);const ps=S.D.problems.filter(p=>p.active||Object.values(T.solve).some(o=>o[p.id])).sort((a,b)=>a.type<b.type?-1:a.type>b.type?1:a.no-b.no);
-  const nDays=S.D.days.filter(d=>d.date<=ymd()).length;$("statMeta").textContent=`연습 ${nDays}일`;
+  const T=tally(d=>d.date<=ymd(),l=>l.date<=ymd());const ms=S.D.members.filter(m=>m.active||T.sol[m.id]||T.fbn[m.id]);const ps=S.D.problems.filter(p=>p.active||Object.values(T.solve).some(o=>o[p.id])).sort((a,b)=>a.type<b.type?-1:a.type>b.type?1:a.no-b.no);
+  const nDays=new Set([...S.D.days.filter(d=>d.date<=ymd()).map(d=>d.date),...(S.D.logs||[]).filter(l=>l.date<=ymd()).map(l=>l.date)]).size;$("statMeta").textContent=`연습 ${nDays}일`;
   $("sumTbl").innerHTML=ms.length?`<table class="stbl"><thead><tr><th>이름</th><th>직접</th><th>피드백</th><th>직접 비율</th><th>안 푼 질환</th></tr></thead><tbody>${ms.map(m=>{const s=T.sol[m.id]||0,f=T.fbn[m.id]||0,z=ps.filter(p=>p.active&&!g2(T.solve,m.id,p.id)).length;
     return `<tr class="click" data-sm="${m.id}"><td class="nm">${esc(m.name)}${m.active?"":` <span class="hint">(쉬는 중)</span>`}</td><td>${s}</td><td>${f}</td><td>${s+f?Math.round(s/(s+f)*100)+"%":"–"}</td><td>${z}</td></tr>`}).join("")}</tbody></table>`:`<div class="empty">조원이 없어요.</div>`;
   $("sumTbl").querySelectorAll("[data-sm]").forEach(r=>r.onclick=()=>{S.sel=r.dataset.sm;S.open=null;renderStats();$("memTbl").scrollIntoView({behavior:"smooth",block:"center"})});
@@ -542,13 +559,31 @@ function renderStats(){
   $("memChips").innerHTML=ms.map(m=>`<button type="button" class="chip sm" data-mc="${m.id}" aria-pressed="${m.id===S.sel}">${esc(m.name)}</button>`).join("");
   $("memChips").querySelectorAll("[data-mc]").forEach(b=>b.onclick=()=>{S.sel=b.dataset.mc;S.open=null;renderStats()});
   if(S.sel){const id=S.sel;
-    const fbs=pid=>S.D.days.filter(d=>d.date<=ymd()).flatMap(d=>d.assigns.filter(a=>a.member_id===id&&a.problem_id===pid&&!(d.skipped||[]).includes(a.slot)).map(a=>({date:d.date,slot:a.slot,fb:a.feedback})));
-    let h=`<table class="stbl"><thead><tr><th>질환</th><th>직접</th><th>피드백</th><th>마지막으로 푼 날</th></tr></thead><tbody>`;
+    const fbs=pid=>S.D.days.filter(d=>d.date<=ymd()).flatMap(d=>d.assigns.filter(a=>a.member_id===id&&a.problem_id===pid&&!(d.skipped||[]).includes(a.slot)).map(a=>({kind:"a",id:a.id,date:d.date,slot:a.slot,fb:a.feedback})))
+      .concat((S.D.logs||[]).filter(l=>l.member_id===id&&l.problem_id===pid&&l.date<=ymd()).map(l=>({kind:"l",id:l.id,date:l.date,fb:l.feedback,obs:l.observers||[]}))).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+    const ps2=activeProblems(),others=activeMembers().filter(m=>m.id!==id);
+    const AL=S.addLog&&S.addLog.member===id?S.addLog:(S.addLog={member:id,date:ymd(),problem:S.open||"",obs:new Set(),fb:""});
+    let h=`<div class="addlog"><b style="font-size:.86rem">+ ${esc((mem(id)||{}).name||"")} 기록 추가 <span class="hint" style="font-weight:500">(조 짜기 없이 한 연습)</span></b>
+      <div class="two"><input type="date" id="alDate" value="${AL.date}" aria-label="날짜"><select id="alProb" aria-label="질환"><option value="">— 질환 —</option>${["A","B","C","D"].filter(t=>ps2.some(p=>p.type===t)).map(t=>`<optgroup label="${t}형">${ps2.filter(p=>p.type===t).map(p=>`<option value="${p.id}" ${p.id===AL.problem?"selected":""}>${esc(plabel(p))}</option>`).join("")}</optgroup>`).join("")}</select></div>
+      ${others.length?`<div class="field"><span>같이 보고 피드백한 사람 (있으면)</span><div class="chips">${others.map(m=>`<button type="button" class="chip sm" data-alo="${m.id}" aria-pressed="${AL.obs.has(m.id)}">${esc(m.name)}</button>`).join("")}</div></div>`:""}
+      <textarea id="alFb" placeholder="피드백" aria-label="피드백">${esc(AL.fb)}</textarea>
+      <button class="btn primary sm" type="button" id="alGo">기록 저장</button></div>
+      <table class="stbl"><thead><tr><th>질환</th><th>직접</th><th>피드백</th><th>마지막으로 푼 날</th></tr></thead><tbody>`;
     for(const p of ps){const s=g2(T.solve,id,p.id),f=g2(T.fb,id,p.id),last=(T.last[id]||{})[p.id];
       h+=`<tr class="click ${s?"":"zero"} ${S.open===p.id?"open":""}" data-op="${p.id}"><td class="nm">${pbadge(p)}</td><td>${s||"0"}</td><td>${f}</td><td class="mono">${last?md(last):"–"}</td></tr>`;
-      if(S.open===p.id){const l=fbs(p.id);h+=`<tr><td colspan="4" class="fbl">${l.length?l.map(x=>`<div class="fbitem"><small>${md(x.date)} ${x.slot}타임</small>${x.fb?esc(x.fb).replace(/\n/g,"<br>"):`<span class="hint">피드백 없음</span>`}</div>`).join(""):`<span class="hint">아직 직접 푼 적이 없어요.</span>`}</td></tr>`}}
+      if(S.open===p.id){const l=fbs(p.id);h+=`<tr><td colspan="4" class="fbl">${l.length?l.map(x=>`<div class="fbitem"><div class="fbh"><small>${md(x.date)}${x.kind==="a"?` ${x.slot}타임`:""}</small><span class="kind">${x.kind==="a"?"조 짜기":"직접 추가"}</span>${x.kind==="l"?`<button class="x" type="button" data-ldel="${x.id}" aria-label="이 기록 지우기">✕</button>`:""}</div>
+        ${x.kind==="l"&&x.obs.length?`<div class="hint">같이 본 사람: ${x.obs.map(o=>esc((mem(o)||{}).name||"?")).join(", ")}</div>`:""}
+        <textarea data-efb="${x.kind}:${x.id}" placeholder="피드백 적기" aria-label="피드백">${esc(x.fb||"")}</textarea><span class="fbm hint" data-efm="${x.id}"></span></div>`).join(""):`<span class="hint">아직 직접 푼 적이 없어요. 위 '기록 추가'로 넣을 수 있어요.</span>`}</td></tr>`}}
     h+=`</tbody></table>`;$("memTbl").innerHTML=ps.length?h:`<div class="empty">질환이 없어요.</div>`;
-    $("memTbl").querySelectorAll("[data-op]").forEach(r=>r.onclick=()=>{S.open=S.open===r.dataset.op?null:r.dataset.op;renderStats()})}
+    $("memTbl").querySelectorAll("[data-op]").forEach(r=>r.onclick=()=>{S.open=S.open===r.dataset.op?null:r.dataset.op;if(S.open&&S.addLog&&!S.addLog.fb)S.addLog.problem=S.open;renderStats()});
+    const ad=$("alDate"),ap=$("alProb"),af=$("alFb");if(ad){ad.onchange=()=>AL.date=ad.value;ap.onchange=()=>AL.problem=ap.value;af.oninput=()=>AL.fb=af.value;
+      $("memTbl").querySelectorAll("[data-alo]").forEach(b=>b.onclick=()=>{const o=b.dataset.alo;AL.obs.has(o)?AL.obs.delete(o):AL.obs.add(o);b.setAttribute("aria-pressed",String(AL.obs.has(o)))});
+      $("alGo").onclick=async()=>{if(!AL.date){toast("날짜를 골라 주세요");return}if(!AL.problem){toast("질환을 골라 주세요");return}
+        try{S.D=await api.addLog(AL.date,id,AL.problem,AL.fb.trim(),[...AL.obs]);S.D.days.forEach(d=>{d.assigns=d.assigns||[];d.skipped=d.skipped||[]});S.D.logs=S.D.logs||[];S.open=AL.problem;S.addLog=null;renderStats();toast(AL.date>ymd()?"저장했어요 · 날짜가 지나면 기록에 세요":"기록 저장했어요")}catch(e){toast(errText(e))}}}
+    $("memTbl").querySelectorAll("[data-efb]").forEach(t=>{let last=t.value;const [kind,eid]=t.dataset.efb.split(":");const go=async()=>{if(t.value===last)return;const m=$("memTbl").querySelector(`[data-efm="${eid}"]`);m.textContent="저장 중…";
+      try{if(kind==="a"){await api.feedback(eid,t.value);for(const d of S.D.days)for(const a of d.assigns)if(a.id===eid)a.feedback=t.value}else{await api.editLog(eid,t.value);(S.D.logs||[]).forEach(l=>{if(l.id===eid)l.feedback=t.value})}last=t.value;m.textContent="저장됨"}catch(e){m.textContent=errText(e)}};
+      t.onblur=go;let tm;t.oninput=()=>{clearTimeout(tm);tm=setTimeout(go,1500)}});
+    $("memTbl").querySelectorAll("[data-ldel]").forEach(b=>b.onclick=async()=>{if(!confirm("이 기록을 지울까요?"))return;try{await api.delLog(b.dataset.ldel);S.D.logs=S.D.logs.filter(l=>l.id!==b.dataset.ldel);renderStats();toast("지웠어요")}catch(e){toast(errText(e))}})}
   else $("memTbl").innerHTML="";
   const act=ps.filter(p=>p.active);
   $("mxTbl").innerHTML=ms.length&&act.length?`<table class="mx"><thead><tr><th></th>${act.map(p=>`<th title="${esc(p.name)}"><span class="tbadge" style="${tStyle(p.type)}">${pcode(p)}</span></th>`).join("")}</tr></thead><tbody>${ms.filter(m=>m.active).map(m=>`<tr><td class="nm">${esc(m.name)}</td>${act.map(p=>{const s=g2(T.solve,m.id,p.id);return `<td class="${s?"":"c0"}" data-l="${Math.min(3,s)}">${s}</td>`}).join("")}</tr>`).join("")}</tbody></table>`:`<div class="empty">조원·질환을 먼저 넣어 주세요.</div>`}
@@ -594,7 +629,7 @@ $("setAuto").onclick=()=>{S.setIds=pickSet(Math.max(3,maxSize()));markDirty();re
 $("setAdd").onclick=()=>{const ps=activeProblems().filter(p=>!S.setIds.includes(p.id));if(!ps.length){toast("더 넣을 질환이 없어요");return}S.setIds=pickSet(S.setIds.length+1,S.setIds);markDirty();renderSet()};
 $("setDel").onclick=()=>{S.setIds.pop();markDirty();renderSet()};
 $("genBtn").onclick=doGenerate;
-async function reload(){S.D=await api.load();S.D.days.forEach(d=>{d.assigns=d.assigns||[];d.skipped=d.skipped||[]})}
+async function reload(){S.D=await api.load();S.D.days.forEach(d=>{d.assigns=d.assigns||[];d.skipped=d.skipped||[]});S.D.logs=S.D.logs||[]}
 $("reload").onclick=async()=>{if(!confirmLeave())return;try{await reload();if(S.tab==="today")loadDate(S.date);else setTab(S.tab);toast("새로 불러왔어요")}catch(e){toast(errText(e))}};
 document.addEventListener("visibilitychange",async()=>{if(document.visibilityState!=="visible"||!S.D||(S.draft&&S.dirty))return;try{await reload();if(S.tab==="today"){const keep=S.date;loadDate(keep)}else if(S.tab==="stats")renderStats()}catch(e){}});
 window.addEventListener("beforeunload",e=>{if(S.draft&&S.dirty){e.preventDefault();e.returnValue=""}});
