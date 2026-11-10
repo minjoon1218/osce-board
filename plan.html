@@ -124,6 +124,13 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .setrow b{font-family:var(--t-mono);font-size:.82rem;color:var(--muted);text-align:center}
 .tbadge{display:inline-block;font-family:var(--t-mono);font-weight:700;font-size:.74rem;border-radius:6px;padding:1px 6px;background:var(--tb);color:var(--ti);margin-right:4px}
 .slot{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.spager{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.spager .pg{width:34px;height:34px;border-radius:9px;border:1px solid var(--line-strong);background:var(--surface);font-size:1.2rem;font-weight:700;color:var(--fg);display:grid;place-items:center}
+.spager .pg:disabled{opacity:.35}
+.stabs{display:flex;gap:3px;background:var(--sunk);padding:3px;border-radius:10px;overflow-x:auto}
+.stabs button{padding:6px 14px;border-radius:7px;font-weight:700;font-size:.88rem;color:var(--muted);white-space:nowrap}
+.stabs button[aria-selected="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.spager .spacer{flex:1}
 .slot+.slot{margin-top:12px}
 .slot-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 12px;background:var(--sunk)}
 .slot-h b{margin-right:auto;font-size:.94rem}
@@ -164,6 +171,13 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .fbitem:last-child{border-bottom:0}
 .fbitem small{color:var(--muted);font-family:var(--t-mono);margin-right:6px}
 /* 질환별 내 기록: 형별 보드 */
+#memChips{gap:6px}
+.mchip{font-size:.95rem;padding:7px 15px}
+.mchip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 2px 6px color-mix(in srgb,var(--accent) 35%,transparent)}
+.mhead{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.mhead .av{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-ink);font-weight:800;font-size:.95rem;flex:none}
+.mhead b{font-size:1.45rem;letter-spacing:-.01em}
+.mhead small{font-size:.95rem;color:var(--muted);font-weight:600;margin-left:-6px}
 .mstat{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0 12px}
 .mstat div{background:var(--sunk);border-radius:10px;padding:8px 10px;display:grid;gap:1px}
 .mstat b{font-size:1.25rem;font-variant-numeric:tabular-nums;line-height:1.2}
@@ -232,6 +246,7 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
 .trow+.arow{border-top:0}
 .rel{grid-column:2/-1;font-size:.74rem;color:var(--muted);line-height:1.4;margin-top:-2px}
 .rel::before{content:"관련 ";font-weight:700;color:var(--faint)}
+.rel .today-case{color:var(--accent-ink);background:var(--accent-soft);border-radius:6px;padding:0 5px;font-weight:800}
 .prel{grid-column:1/-1;width:100%;font:inherit;font-size:.8rem;line-height:1.5;padding:6px 8px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--fg);resize:vertical}
 /* 피드백 (댓글처럼 쌓임) */
 .fbt{grid-column:2/-1;display:grid;gap:6px;margin:2px 0 4px}
@@ -338,12 +353,12 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
     <!-- 기록 -->
     <div id="tab-stats" hidden class="col">
       <section class="card">
-        <div class="card-h"><h2>사람별 합계</h2><span class="meta" id="statMeta"></span></div>
-        <div class="card-b"><div class="scroll" id="sumTbl"></div><span class="hint">오늘까지 저장된 연습만 세요 ('안 함'으로 표시한 타임은 빠져요). 직접 = 내가 푼 문제, 피드백 = 같은 조원이 푸는 걸 보고 피드백한 문제.</span></div>
-      </section>
-      <section class="card">
         <div class="card-h"><h2>사람별 기록</h2><span class="meta hide-sm">이름을 고르고 질환을 누르면 피드백이 보여요</span></div>
         <div class="card-b"><div class="chips" id="memChips"></div><div class="scroll" id="memTbl"></div></div>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>사람별 합계</h2><span class="meta" id="statMeta"></span></div>
+        <div class="card-b"><div class="scroll" id="sumTbl"></div><span class="hint">오늘까지 저장된 연습만 세요 ('안 함'으로 표시한 타임은 빠져요). 직접 = 내가 푼 문제, 피드백 = 같은 조원이 푸는 걸 보고 피드백한 문제.</span></div>
       </section>
       <section class="card">
         <div class="card-h"><h2>전체 한눈에 (직접 푼 횟수)</h2></div>
@@ -475,6 +490,14 @@ const dayOf=date=>S.D.days.find(d=>d.date===date);
 const relShort=t=>{const g={},other=[];String(t||"").split(/\n|\s·\s/).map(x=>x.trim()).filter(Boolean).forEach(x=>{const m=x.match(/^(초진|두근두근)\s*#?(\d+)/);
   if(m){(g[m[1]]=g[m[1]]||[]).push(m[2]+(/감별/.test(x)?"(감별)":""))}else{const h=x.match(/^#\s?(\d+)/);other.push(h?`#${h[1]}`:x.replace(/\s*\(.*\)\s*$/,""))}});
   return [...["초진","두근두근"].filter(k=>g[k]).map(k=>`${k} ${[...new Set(g[k])].join("·")}`),...other].join(" / ")};
+/* 관련 케이스 중 하나를 고정 무작위로 (같은 날·사람·문제면 늘 같은 번호) — 감별 케이스는 뺌 */
+const relCases=t=>[...new Set(String(t||"").split(/\n|\s·\s/).map(x=>x.trim()).filter(x=>x&&!/감별/.test(x)).map(x=>{const m=x.match(/^(초진|두근두근)\s*#?(\d+)/);return m?`${m[1]} ${m[2]}`:""}).filter(Boolean))];
+const hashStr=str=>{let h=2166136261;for(const ch of str){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0};
+const caseOrder=(a,date)=>{const p=prob(a.problem_id);const cs=p?relCases(p.related):[];return cs.map(c=>[hashStr(`${date}|${a.slot}|${a.member_id}|${a.problem_id}|${c}`),c]).sort((x,y)=>x[0]-y[0]).map(x=>x[1])};
+/* 같은 조·타임 안에서는 케이스 번호가 겹치지 않게 */
+const caseFor=(a,date)=>{const rows=(S.draft||[]).filter(x=>x.slot===a.slot&&x.grp===a.grp).sort((x,y)=>x.ord-y.ord);const used=new Set();
+  for(const r of rows){const o=caseOrder(r,date);const c=o.find(x=>!used.has(x))||o[0]||"";if(c)used.add(c);if(r===a||(r.member_id===a.member_id&&r.problem_id===a.problem_id))return c}
+  return caseOrder(a,date)[0]||""};
 /* 기록 집계: filter(day) 통과한 날, 안 함 타임 제외 */
 function tally(filter,logFilter){
   const T={solve:{},fb:{},pair:{},big:{},sol:{},fbn:{},last:{}};
@@ -519,11 +542,17 @@ function pickSet(k,keep=[]){
 /* 조 · 문제 짜기: 타임마다 조를 새로 나누고, 조 안에서 형(A→B→C)마다 한 명씩 다른 문제를 풀고 나머지가 피드백 */
 function combos(arr,k){const r=[];const go=(i,acc)=>{if(acc.length===k){r.push(acc.slice());return}for(let j=i;j<arr.length;j++){acc.push(arr[j]);go(j+1,acc);acc.pop()}};go(0,[]);return r}
 function perms(arr){if(arr.length<=1)return [arr.slice()];const r=[];arr.forEach((x,i)=>perms(arr.filter((_,j)=>j!==i)).forEach(p=>r.push([x,...p])));return r}
-function generate(){
+function generate(only){
   const T=tally(d=>d.date!==S.date);const present=[...S.present];const types=TYPES().filter(t=>setOf(t).length);
   const tPair={},tSolved={},tSeen={};const out=[];
   const pk=(a,b)=>[a,b].sort().join("|");
-  for(let s=1;s<=S.slots;s++){
+  if(only){/* 다른 타임은 그대로 두고, 그 타임에서 한 짝·문제를 피해서 이 타임만 짬 */
+    const base=(S.draft||[]).filter(a=>a.slot!==only);out.push(...base.map(a=>({...a})));
+    const bs={};base.forEach(a=>{(bs[a.slot+"|"+a.grp]=bs[a.slot+"|"+a.grp]||[]).push(a)});
+    Object.values(bs).forEach(rows=>{const g=[...new Set(rows.map(a=>a.member_id))];
+      rows.forEach(a=>{(tSolved[a.member_id]=tSolved[a.member_id]||new Set()).add(a.problem_id);for(const o of g)if(o!==a.member_id){(tSeen[o]=tSeen[o]||{});tSeen[o][a.problem_id]=(tSeen[o][a.problem_id]||0)+1}});
+      for(let x=0;x<g.length;x++)for(let y=x+1;y<g.length;y++){const k=pk(g[x],g[y]);tPair[k]=(tPair[k]||0)+1}})}
+  for(let s=only||1;s<=(only||S.slots);s++){
     const sizes=slotSizes(s),mn=Math.min(...sizes);
     let best=null;
     for(let it=0;it<1500;it++){const q=shuffle(present.slice());let i=0,cost=Math.random()*.1;const gs=sizes.map(k=>{const g=q.slice(i,i+k);i+=k;return g});
@@ -543,7 +572,7 @@ function generate(){
           for(const o of g)if(o!==m){(tSeen[o]=tSeen[o]||{});tSeen[o][p]=(tSeen[o][p]||0)+1}})});
       for(let a=0;a<g.length;a++)for(let b=a+1;b<g.length;b++){const k=pk(g[a],g[b]);tPair[k]=(tPair[k]||0)+1}
     })}
-  return out}
+  return out.sort((a,b)=>a.slot-b.slot||a.grp-b.grp||a.ord-b.ord)}
 
 /* ---------- 피드백: 댓글처럼 한 건씩 ---------- */
 const FBQ={};
@@ -577,7 +606,7 @@ function renderMe(){const el=$("meSel");if(!el||!S.D)return;const v=meId();el.in
 /* ---------- 오늘 연습 화면 ---------- */
 const grpMembers=rows=>{const seen=[];rows.slice().sort((a,b)=>a.ord-b.ord).forEach(a=>{if(!seen.includes(a.member_id))seen.push(a.member_id)});return seen};
 function loadDate(date){
-  S.date=date;S.open=null;const d=dayOf(date);
+  if(date!==S.date)S.vslot=1;S.date=date;S.open=null;const d=dayOf(date);
   if(d){S.savedId=d.id;S.slots=d.slots;S.setIds=d.problem_set.slice();S.draft=d.assigns.map(a=>({...a}));S.dirty=false;
     S.present=new Set(d.assigns.map(a=>a.member_id));S.sizes={};
     for(let s=1;s<=d.slots;s++){const rows=d.assigns.filter(a=>a.slot===s);const grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);S.sizes[s]=grps.map(g=>grpMembers(rows.filter(a=>a.grp===g)).length).join(",")}}
@@ -597,6 +626,7 @@ function renderToday(){
   $("presentChips").innerHTML=ms.length?ms.map(m=>`<button type="button" class="chip" data-m="${m.id}" aria-pressed="${S.present.has(m.id)}">${esc(m.name)}</button>`).join(""):`<span class="hint">'조원·질환' 탭에서 조원 이름을 먼저 넣어 주세요.</span>`;
   $("presentChips").querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{const id=b.dataset.m;S.present.has(id)?S.present.delete(id):S.present.add(id);S.sizes={};S.draft=S.savedId?S.draft:null;markDirty();renderToday()});
   $("presentN").textContent=`· ${S.present.size}명`;
+  $("slotSeg").parentElement.hidden=!!(S.draft&&S.draft.length);
   $("slotSeg").innerHTML=[1,2,3,4].map(n=>`<button type="button" data-n="${n}" aria-pressed="${S.slots===n}">${n}타임</button>`).join("");
   $("slotSeg").querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>{S.slots=Number(b.dataset.n);markDirty();renderToday()});
   let sz="";for(let s=1;s<=S.slots;s++){const v=S.sizes[s]??autoSizes(S.present.size).join(",");const sum=parseSizes(v).reduce((a,b)=>a+b,0);
@@ -636,8 +666,14 @@ function renderResult(){
   const present=[...S.present].map(mem).filter(Boolean);
   const pOpts=(t,sel)=>{const ids=[...new Set([...setOf(t),sel])];return ids.map(id=>prob(id)).filter(Boolean).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(plabel(p))}</option>`).join("")+`<option value="__other">다른 질환…</option>`};
   const mOpts=sel=>present.map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}</option>`).join("");
-  let h="";const slots=[...new Set(S.draft.map(a=>a.slot))].sort();
-  for(const s of slots){const skip=saved&&day&&(day.skipped||[]).includes(s);
+  let h="";const slots=[...new Set(S.draft.map(a=>a.slot))].sort((a,b)=>a-b);
+  if(!slots.includes(S.vslot))S.vslot=slots[0];
+  if(slots.length>1||!RO){const ix=slots.indexOf(S.vslot);
+    h+=`<div class="spager"><button type="button" class="pg" data-vs="${slots[ix-1]||""}" ${ix>0?"":"disabled"} aria-label="이전 타임">‹</button>
+      <div class="stabs" role="tablist">${slots.map(x=>`<button type="button" role="tab" data-vs="${x}" aria-selected="${x===S.vslot}">${x}타임${saved&&day&&(day.skipped||[]).includes(x)?" ·안 함":""}</button>`).join("")}</div>
+      <button type="button" class="pg" data-vs="${slots[ix+1]||""}" ${ix<slots.length-1?"":"disabled"} aria-label="다음 타임">›</button>
+      ${RO?"":`<span class="spacer"></span><button class="btn sm" type="button" id="reSlot">🎲 ${S.vslot}타임만 다시</button>${slots.length>1&&S.vslot===slots[slots.length-1]?`<button class="btn sm ghost" type="button" id="delSlot">${S.vslot}타임 빼기</button>`:""}<button class="btn sm primary" type="button" id="addSlot">+ 타임 추가</button>`}</div>`}
+  for(const s of slots.filter(x=>x===S.vslot)){const skip=saved&&day&&(day.skipped||[]).includes(s);
     const rows=S.draft.filter(a=>a.slot===s);const grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);
     h+=`<div class="slot ${skip?"skip":""}"><div class="slot-h"><b>${s}타임</b>${saved&&!RO?`<label class="chk"><input type="checkbox" data-skip="${s}" ${skip?"checked":""}> 이 타임 안 함</label>`:""}</div><div class="groups">`;
     for(const g of grps){const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);const gm=grpMembers(gr);
@@ -648,7 +684,7 @@ function renderResult(){
       for(const t of ts){h+=`<div class="trow" style="${tStyle(t)}">${t}형</div>`;
         for(const a of gr.filter(x=>((prob(x.problem_id)||{}).type||"?")===t)){const i=S.draft.indexOf(a);
           h+=`<div class="arow"><i></i><span class="atxt">${esc((mem(a.member_id)||{}).name||"?")}</span>`+(RO?`<span class="atxt">${pbadge(prob(a.problem_id))}</span>`:`<select data-ap="${i}" aria-label="${esc((mem(a.member_id)||{}).name||"")} ${t}형 문제">${pOpts(t,a.problem_id)}</select>`);
-          {const pr=prob(a.problem_id);if(pr&&pr.related)h+=`<div class="rel">${esc(relShort(pr.related))}</div>`}
+          {const pr=prob(a.problem_id),cs=caseFor(a,S.date);if(pr&&pr.related)h+=`<div class="rel">${cs?`<b class="today-case">오늘 ${esc(cs)}</b> · `:""}${esc(relShort(pr.related))}</div>`}
           if(saved&&day)h+=fbThread({day:day.id,slot:a.slot,member:a.member_id,problem:a.problem_id},`${(mem(a.member_id)||{}).name||""} · ${pcode(prob(a.problem_id))} 피드백`);
           h+=`</div>`}}
       h+=`</div>`}
@@ -657,6 +693,9 @@ function renderResult(){
   if(S.savedId&&!RO)h+=`<div style="display:flex;justify-content:flex-end"><button class="btn sm ghost" type="button" id="delDay">이 날 기록 지우기</button></div>`;
   if(!saved)h+=`<div class="hint">사람·문제를 직접 바꿀 수 있어요. 조 위쪽에서 사람을 바꾸면 그 타임 안에서 두 사람 자리가 통째로 바뀌어요. 저장해야 피드백 칸이 열려요.</div>`;
   el.innerHTML=h;
+  el.querySelectorAll("[data-vs]").forEach(b=>b.onclick=()=>{const v=Number(b.dataset.vs);if(!v)return;S.vslot=v;S.fbOpen=null;renderResult()});
+  const as=$("addSlot");if(as)as.onclick=addSlot;const rs=$("reSlot");if(rs)rs.onclick=()=>reSlot(S.vslot);
+  const ds=$("delSlot");if(ds)ds.onclick=()=>{const v=S.vslot;if(!confirm(`${v}타임을 뺄까요?${S.savedId?" (저장해야 반영돼요)":""}`))return;S.draft=S.draft.filter(a=>a.slot!==v);S.slots=Math.max(...S.draft.map(a=>a.slot));delete S.sizes[v];S.vslot=S.slots;S.dirty=true;renderToday()};
   el.querySelectorAll("[data-gm]").forEach(sel=>sel.onchange=()=>{const [s,old]=sel.dataset.gm.split("|"),nv=sel.value,slot=Number(s);
     S.draft.filter(a=>a.slot===slot).forEach(a=>{if(a.member_id===old)a.member_id="__tmp";else if(a.member_id===nv)a.member_id=old});
     S.draft.filter(a=>a.member_id==="__tmp").forEach(a=>a.member_id=nv);markDirty();renderResult()});
@@ -666,28 +705,38 @@ function renderResult(){
 
   el.querySelectorAll("[data-skip]").forEach(c=>c.onchange=async()=>{try{await api.skip(day.id,Number(c.dataset.skip),c.checked);day.skipped=c.checked?[...new Set([...(day.skipped||[]),Number(c.dataset.skip)])]:(day.skipped||[]).filter(x=>x!==Number(c.dataset.skip));renderResult();toast(c.checked?"이 타임은 기록에서 빠져요":"다시 기록에 넣었어요")}catch(e){toast(errText(e))}});
   const dd=$("delDay");if(dd)dd.onclick=async()=>{if(!confirm(`${md(S.date)} 조 편성과 피드백을 지울까요?`))return;try{await api.delDay(S.savedId);await reload();loadDate(S.date);toast("지웠어요")}catch(e){toast(errText(e))}}}
+function addSlot(){if(S.present.size<2){toast("나오는 사람을 2명 이상 골라 주세요.");return}
+  const n=Math.max(0,...(S.draft||[]).map(a=>a.slot))+1;if(n>6){toast("타임은 6개까지예요");return}
+  for(const id of S.draft.map(a=>a.member_id))if(!S.present.has(id)){toast("나오는 사람 목록이 바뀌었어요 · 전체 다시 짜기를 써 주세요");return}
+  S.slots=n;S.sizes[n]=S.sizes[n]??autoSizes(S.present.size).join(",");
+  S.setIds=pickSet(maxSize(),S.setIds);S.draft=generate(n);S.vslot=n;S.dirty=true;renderToday();toast(`${n}타임을 짰어요 · 저장해 주세요 (앞 타임은 그대로)`)}
+function reSlot(v){const sum=parseSizes(S.sizes[v]??autoSizes(S.present.size).join(",")).reduce((a,b)=>a+b,0);if(sum!==S.present.size){toast(`${v}타임 조 인원 합(${sum})이 나오는 사람 수(${S.present.size})와 달라요.`);return}
+  if(S.savedId&&!confirm(`${v}타임만 새로 짤까요? (다른 타임은 그대로)`))return;
+  S.setIds=pickSet(maxSize(),S.setIds);S.draft=generate(v);S.vslot=v;S.dirty=true;renderToday();toast(`${v}타임만 다시 짰어요 · 저장해 주세요`)}
+{let sx=0,sy=0;const r=document.getElementById("result");if(r){r.addEventListener("touchstart",e=>{const t=e.touches[0];sx=t.clientX;sy=t.clientY},{passive:true});
+  r.addEventListener("touchend",e=>{if(e.target.closest("select,textarea,input"))return;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)<70||Math.abs(dy)>Math.abs(dx)*.6)return;
+    const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort((a,b)=>a-b),ix=slots.indexOf(S.vslot),nx=slots[ix+(dx<0?1:-1)];if(nx){S.vslot=nx;S.fbOpen=null;renderResult()}},{passive:true})}}
 const skipNote=d=>d&&(d.skipped||[]).length?`<div class="hint">${d.skipped.join("·")}타임은 '안 함'으로 표시돼 기록에서 빠져요.</div>`:"";
 function validate(){if(S.present.size<2)return "나오는 사람을 2명 이상 골라 주세요.";
   for(let s=1;s<=S.slots;s++){const sum=parseSizes(S.sizes[s]??autoSizes(S.present.size).join(",")).reduce((a,b)=>a+b,0);if(sum!==S.present.size)return `${s}타임 조 인원 합(${sum})이 나오는 사람 수(${S.present.size})와 달라요.`}
   if(!activeProblems().length)return "'조원·질환' 탭에서 질환을 먼저 넣어 주세요.";return ""}
 function doGenerate(){const v=validate();if(v){toast(v);return}
-  if(S.savedId&&!confirm("저장된 조 편성을 새로 짤까요? (같은 사람·같은 문제로 남는 줄의 피드백은 유지돼요)"))return;
+  if(S.draft&&S.draft.length&&!confirm(`모든 타임(${S.slots}타임)을 새로 짤까요? 한 타임만 바꾸려면 오른쪽 '🎲 n타임만 다시'를, 더 하려면 '+ 타임 추가'를 쓰세요.`))return;
   S.setIds=pickSet(maxSize(),S.setIds);
-  S.draft=generate();S.dirty=true;renderSet();renderResult();toast("짰어요 · 마음에 들면 저장해 주세요")}
+  S.draft=generate();S.vslot=1;S.dirty=true;renderToday();toast("짰어요 · 마음에 들면 저장해 주세요")}
 async function saveDay(){const v=validate();if(v){toast(v);return}
   for(let s=1;s<=S.slots;s++){const rows=S.draft.filter(a=>a.slot===s);const k=rows.map(a=>a.member_id+"|"+(prob(a.problem_id)||{}).type);if(k.length!==new Set(k).size){toast(`${s}타임에 같은 사람이 같은 형을 두 번 풀어요`);return}
     const byM={};rows.forEach(a=>(byM[a.member_id]=byM[a.member_id]||new Set()).add(a.grp));if(Object.values(byM).some(x=>x.size>1)){toast(`${s}타임에 한 사람이 두 조에 있어요`);return}}
-  const slots=Math.max(...S.draft.map(a=>a.slot));
-  try{S.D=await api.saveDay(S.date,slots,S.setIds,S.draft.map(a=>({slot:a.slot,grp:a.grp,ord:a.ord,member_id:a.member_id,problem_id:a.problem_id})));normD();loadDate(S.date);toast("저장했어요 · 피드백 칸이 열렸어요")}catch(e){toast(errText(e))}}
+  const slots=Math.max(...S.draft.map(a=>a.slot));const keepV=S.vslot;
+  try{S.D=await api.saveDay(S.date,slots,S.setIds,S.draft.map(a=>({slot:a.slot,grp:a.grp,ord:a.ord,member_id:a.member_id,problem_id:a.problem_id})));normD();loadDate(S.date);if(keepV){S.vslot=keepV;renderResult()}toast("저장했어요 · 피드백 칸이 열렸어요")}catch(e){toast(errText(e))}}
 /* 공유용: 화면에 보이는 편성(저장 전이어도) 기준 */
 function planData(){const day=dayOf(S.date);const skipped=S.savedId&&!S.dirty&&day?(day.skipped||[]):[];
   const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort().filter(s=>!skipped.includes(s)).map(s=>{const rows=S.draft.filter(a=>a.slot===s);
     return {s,groups:[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b).map(g=>{const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);const ts=[];gr.forEach(a=>{const t=(prob(a.problem_id)||{}).type||"?";if(!ts.includes(t))ts.push(t)});
-      return {g,members:grpMembers(gr).map(m=>(mem(m)||{}).name||"?"),types:ts.map(t=>({t,rows:gr.filter(a=>((prob(a.problem_id)||{}).type||"?")===t).map(a=>({name:(mem(a.member_id)||{}).name||"?",code:pcode(prob(a.problem_id)),kw:pkw(prob(a.problem_id)),label:plabel(prob(a.problem_id))}))}))}})}});
+      return {g,members:grpMembers(gr).map(m=>(mem(m)||{}).name||"?"),types:ts.map(t=>({t,rows:gr.filter(a=>((prob(a.problem_id)||{}).type||"?")===t).map(a=>({name:(mem(a.member_id)||{}).name||"?",code:pcode(prob(a.problem_id)),kw:pkw(prob(a.problem_id)),cs:caseFor(a,S.date),label:plabel(prob(a.problem_id))}))}))}})}});
   return {title:`${md(S.date)} ${S.D.unit} 연습`,set:TYPES().map(t=>({t,items:S.setIds.filter(id=>(prob(id)||{}).type===t).map(id=>prob(id))})).filter(x=>x.items.length),slots}}
-function planText(){const P=planData();const L=[`📋 ${P.title}`,"","[문제 세트]"];
-  for(const x of P.set)L.push(`${x.t}형: ${x.items.map(pkw).join(" · ")}`);
-  for(const sl of P.slots){L.push("",`[${sl.s}타임]`);for(const g of sl.groups){L.push(`${g.g}조 (${g.members.join("·")})`);for(const t of g.types)L.push(`  ${t.t}: `+t.rows.map(r=>`${r.name} ${r.kw}`).join(" · "))}}
+function planText(){const P=planData();const L=[`📋 ${P.title}`];
+  for(const sl of P.slots){L.push("",`[${sl.s}타임]`);for(const g of sl.groups){L.push(`${g.g}조 (${g.members.join("·")})`);for(const t of g.types)L.push(`  ${t.t}: `+t.rows.map(r=>`${r.name} ${r.cs||r.kw}`).join(" · "))}}
   if(S.D.member_code)L.push("",`피드백 쓰기: ${memberLink()}`);return L.join("\n")}
 async function copyDay(){const txt=planText();
   if(navigator.share&&/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)){try{await navigator.share({text:txt});return}catch(e){if(e&&e.name==="AbortError")return}}
@@ -702,10 +751,6 @@ function drawPlan(P){
   const run=(draw)=>{let y=PAD;const T=(txt,x,yy,sz,w,col,align)=>{if(!draw)return;font(sz,w);ctx.fillStyle=col;ctx.textAlign=align||"left";ctx.textBaseline="top";ctx.fillText(txt,x,yy)};
     font(24,800);T(P.title,PAD,y,24,800,"#16202a");y+=32;
     font(13);T("조 안에서 형마다 1인 1문제 + 나머지 피드백",PAD,y,13,400,"#667085");y+=26;
-    for(const x of P.set){font(14,800);T(`${x.t}형`,PAD,y,14,800,C[x.t]||"#333");font(13.5);
-      const ls=wrap(x.items.map(pkw).join(" · "),W-PAD*2-46);ls.forEach((l,k)=>T(l,PAD+46,y+k*20,13.5,500,"#16202a"));y+=ls.length*20+2;
-      for(const p of x.items.filter(p=>p.related)){font(11.5);const rl=wrap(`${pkw(p)}  ${relShort(p.related)}`,W-PAD*2-46);rl.forEach((l,k)=>T(l,PAD+46,y+k*16,11.5,400,"#8a94a3"));y+=rl.length*16}
-      y+=8}
     y+=4;
     for(const sl of P.slots){
       if(draw){ctx.fillStyle="#eef3f2";ctx.beginPath();ctx.roundRect?ctx.roundRect(PAD,y,W-PAD*2,30,8):ctx.rect(PAD,y,W-PAD*2,30);ctx.fill()}
@@ -718,7 +763,7 @@ function drawPlan(P){
           if(draw){ctx.strokeStyle="#dde3e6";ctx.lineWidth=1;ctx.beginPath();ctx.roundRect?ctx.roundRect(x0+.5,y+.5,cw-1,H-1,10):ctx.rect(x0,y,cw,H);ctx.stroke()}
           let yy=y+10;font(13,700);wrap(`${g.g}조 · ${g.members.join(" ")}`,cw-20).forEach(l=>{T(l,x0+10,yy,13,700,"#16202a");yy+=18});yy+=6;
           for(const t of g.types){T(`${t.t}형`,x0+10,yy+3,11.5,800,C[t.t]||"#333");yy+=20;
-            for(const rr of t.rows){T(rr.name,x0+10,yy,13,500,"#16202a");font(13,800);let kw=rr.kw;const kwMax=cw-20-ctx.measureText(rr.name).width-12;while(kw.length>1&&ctx.measureText(kw).width>kwMax)kw=kw.slice(0,-1);if(kw!==rr.kw)kw=kw.slice(0,-1)+"…";T(kw,x0+cw-10,yy,13,800,"#16202a","right");yy+=19}}});
+            for(const rr of t.rows){T(rr.name,x0+10,yy,13,500,"#16202a");font(13,800);let kw=rr.cs||rr.kw;const kwMax=cw-20-ctx.measureText(rr.name).width-12;while(kw.length>1&&ctx.measureText(kw).width>kwMax)kw=kw.slice(0,-1);if(kw!==(rr.cs||rr.kw))kw=kw.slice(0,-1)+"…";T(kw,x0+cw-10,yy,13,800,"#16202a","right");yy+=19}}});
         y+=H+GAP}
       y+=6}
     if(S.D.member_code){T("피드백 쓰기: "+memberLink(),PAD,y,11,400,"#8a94a3");y+=18}
@@ -739,9 +784,9 @@ function renderStats(){
   const nDays=new Set([...S.D.days.filter(d=>d.date<=ymd()).map(d=>d.date),...(S.D.logs||[]).filter(l=>l.date<=ymd()).map(l=>l.date)]).size;$("statMeta").textContent=`연습 ${nDays}일`;
   $("sumTbl").innerHTML=ms.length?`<table class="stbl"><thead><tr><th>이름</th><th>직접</th><th>피드백</th><th>직접 비율</th><th>안 푼 질환</th></tr></thead><tbody>${ms.map(m=>{const s=T.sol[m.id]||0,f=T.fbn[m.id]||0,z=ps.filter(p=>p.active&&!g2(T.solve,m.id,p.id)).length;
     return `<tr class="click" data-sm="${m.id}"><td class="nm">${esc(m.name)}${m.active?"":` <span class="hint">(쉬는 중)</span>`}</td><td>${s}</td><td>${f}</td><td>${s+f?Math.round(s/(s+f)*100)+"%":"–"}</td><td>${z}</td></tr>`}).join("")}</tbody></table>`:`<div class="empty">조원이 없어요.</div>`;
-  $("sumTbl").querySelectorAll("[data-sm]").forEach(r=>r.onclick=()=>{S.sel=r.dataset.sm;S.open=null;renderStats();$("memTbl").scrollIntoView({behavior:"smooth",block:"center"})});
+  $("sumTbl").querySelectorAll("[data-sm]").forEach(r=>r.onclick=()=>{S.sel=r.dataset.sm;S.open=null;renderStats();$("memChips").scrollIntoView({behavior:"smooth",block:"start"})});
   if(!S.sel||!ms.some(m=>m.id===S.sel))S.sel=(ms[0]||{}).id||null;
-  $("memChips").innerHTML=ms.map(m=>`<button type="button" class="chip sm" data-mc="${m.id}" aria-pressed="${m.id===S.sel}">${esc(m.name)}</button>`).join("");
+  $("memChips").innerHTML=ms.map(m=>`<button type="button" class="chip mchip" data-mc="${m.id}" aria-pressed="${m.id===S.sel}">${esc(m.name)}</button>`).join("");
   $("memChips").querySelectorAll("[data-mc]").forEach(b=>b.onclick=()=>{S.sel=b.dataset.mc;S.open=null;renderStats()});
   if(S.sel){const id=S.sel;
     const fbs=pid=>S.D.days.filter(d=>d.date<=ymd()).flatMap(d=>d.assigns.filter(a=>a.member_id===id&&a.problem_id===pid&&!(d.skipped||[]).includes(a.slot)).map(a=>({kind:"a",id:a.id,date:d.date,slot:a.slot,q:{day:d.id,slot:a.slot,member:id,problem:pid}})))
@@ -752,7 +797,7 @@ function renderStats(){
     const tot={s:0,f:0,z:0,c:0},act2=ps.filter(p=>p.active);
     act2.forEach(p=>{const sv=g2(T.solve,id,p.id);tot.s+=sv;tot.f+=g2(T.fb,id,p.id);if(!sv)tot.z++});tot.c=(S.D.fbs||[]).filter(f=>f.member_id===id).length;
     const F=S.dfilter||"all";
-    let h=`<div class="mstat"><div><b>${tot.s}</b><span>직접 푼 문제</span></div><div><b>${tot.f}</b><span>피드백한 문제</span></div><div class="${tot.z?"warn":""}"><b>${tot.z}<small style="font-size:.8rem;color:var(--muted)"> / ${act2.length}</small></b><span>아직 안 푼 질환</span></div><div><b>💬 ${tot.c}</b><span>받은 피드백</span></div></div>
+    let h=`<div class="mhead"><span class="av">${esc(((mem(id)||{}).name||"?").slice(-2))}</span><b>${esc((mem(id)||{}).name||"")}</b><small>의 기록</small>${(mem(id)||{}).active?"":`<span class="kind">쉬는 중</span>`}</div><div class="mstat"><div><b>${tot.s}</b><span>직접 푼 문제</span></div><div><b>${tot.f}</b><span>피드백한 문제</span></div><div class="${tot.z?"warn":""}"><b>${tot.z}<small style="font-size:.8rem;color:var(--muted)"> / ${act2.length}</small></b><span>아직 안 푼 질환</span></div><div><b>💬 ${tot.c}</b><span>받은 피드백</span></div></div>
       <div class="dlegend"><span><i style="background:var(--ok)"></i>직접 풀어 봄</span><span><i style="background:var(--held)"></i>피드백만 해 봄</span><span><i style="border:1px dashed var(--line-strong)"></i>아직</span>
         <span class="dfilter" role="group" aria-label="보기">${[["all","전체"],["todo","안 푼 것"],["fb","피드백 있는 것"]].map(([k,l])=>`<button type="button" data-df="${k}" aria-pressed="${F===k}">${l}</button>`).join("")}</span></div>
       <div class="dboard">`;
