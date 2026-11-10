@@ -873,7 +873,7 @@ function openLogin(){
       if(!info){$("lMsg").className="msg err";$("lMsg").textContent="코드가 맞지 않아요. 대소문자 상관없이 다시 확인해 주세요.";$("codeGo").disabled=false;return}
       setAuth(c.toUpperCase(),info);closeDrawer();render();toast(info.role==="admin"?"관리자로 로그인했어요":info.team+"조 조장으로 로그인했어요");
     }catch(err){$("lMsg").className="msg err";$("lMsg").textContent="확인하지 못했어요. 인터넷 연결을 확인해 주세요.";$("codeGo").disabled=false}};
-  $("codeGo").onclick=go;$("codeIn").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();go()}};
+  $("codeGo").onclick=go;$("codeIn").onkeydown=e=>{if(e.key==="Enter"&&!e.isComposing&&e.keyCode!==229){e.preventDefault();go()}};
   setTimeout(()=>$("codeIn").focus(),230);
 }
 function logoutBtn(){$("logout").onclick=()=>{setAuth("",null);closeDrawer();render();toast("로그아웃했어요")}}
@@ -1201,7 +1201,7 @@ function bindForm(){
     delete p.team;
     if(p.date&&!dateBookable(p.date)){note=`${md(p.date)}은 아직 신청할 수 없어서 날짜는 그대로 뒀어요.`;cls="err";delete p.date}
     Object.assign(S.draft,p);if(p.room&&S.draft.rooms&&!S.draft.editId)S.draft.rooms=new Set([p.room]);drawForm();setMsg(note,cls)};
-  $("fPaste").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();$("fParse").click()}};
+  $("fPaste").onkeydown=e=>{if(e.key==="Enter"&&!e.isComposing&&e.keyCode!==229){e.preventDefault();$("fParse").click()}};
   $("fSubmit").onclick=submit;
   if($("fBack"))$("fBack").onclick=()=>openDetail(S.draft.editId);
   $("drawerBody").querySelectorAll("[data-open]").forEach(b=>b.onclick=()=>openDetail(b.dataset.open));

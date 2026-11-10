@@ -572,7 +572,7 @@ function renderSetup(){
   $("probList").querySelectorAll("[data-px]").forEach(b=>b.onclick=()=>{PROB.splice(Number(b.dataset.px),1);renderSetup()});
   $("probList").querySelectorAll("[data-padd]").forEach(b=>b.onclick=()=>{const t=b.dataset.padd;const no=Math.max(0,...PROB.filter(p=>p.type===t).map(p=>p.no))+1;PROB.push({id:null,type:t,no,name:"",active:true});renderSetup();const ins=$("probList").querySelectorAll(`[data-pt]`);ins[ins.length-1]&&[...ins].find(x=>PROB[Number(x.dataset.pt)].type===t&&PROB[Number(x.dataset.pt)].no===no)?.focus()})}
 $("memAdd").onclick=()=>{const v=$("memNew").value.split(/[,\n]/).map(s=>s.trim()).filter(Boolean);if(!v.length)return;v.forEach(n=>MEM.push({id:null,name:n.slice(0,20),active:true}));$("memNew").value="";renderSetup()};
-$("memNew").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();$("memAdd").click()}};
+$("memNew").onkeydown=e=>{if(e.key==="Enter"&&!e.isComposing&&e.keyCode!==229){e.preventDefault();$("memAdd").click()}};
 $("memSave").onclick=async()=>{const m=$("memMsg");const items=MEM.map((x,i)=>({id:x.id,name:String(x.name||"").trim(),active:x.active!==false,sort:i}));
   if(items.some(x=>!x.name)){m.className="msg err";m.textContent="빈 이름이 있어요.";return}
   if(new Set(items.map(x=>x.name)).size!==items.length){m.className="msg err";m.textContent="같은 이름이 두 번 있어요. 성까지 써 주세요.";return}
@@ -626,7 +626,7 @@ $("codeGo").onclick=async()=>{const code=$("codeIn").value.trim();if(!code)retur
   try{const info=await api.login(code);if(!info){$("gMsg").textContent="코드가 맞지 않아요.";return}
     S.code=code.toUpperCase();S.role=info.role;S.team=info.team||"";
     if(info.role==="member")store("osce-prac-code",S.code);else{store("osce-code",S.code);store("osce-role",S.role);store("osce-team",S.team)}await enter()}catch(e){$("gMsg").textContent=errText(e)}};
-$("codeIn").onkeydown=e=>{if(e.key==="Enter")$("codeGo").click()};
+$("codeIn").onkeydown=e=>{if(e.key==="Enter"&&!e.isComposing&&e.keyCode!==229)$("codeGo").click()};
 (async()=>{S.code=store("osce-code")||store("osce-prac-code")||"";S.role=store("osce-code")?(store("osce-role")||""):"member";S.team=store("osce-code")?(store("osce-team")||""):"";
   if(!S.code){showGate();return}
   try{const info=await api.login(S.code);if(!info){["osce-code","osce-role","osce-team","osce-prac-code"].forEach(k=>store(k,null));S.code="";showGate();return}S.role=info.role;S.team=info.team||"";await enter()}catch(e){showGate();$("gMsg").textContent=errText(e)}})();
