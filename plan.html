@@ -97,6 +97,16 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .toprow select{width:auto}
 .grid2{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:14px;align-items:start}
 @media (max-width:900px){.grid2{grid-template-columns:minmax(0,1fr)}}
+/* 한 타임에 3조 이상이면: 설정을 위로, 조 편성은 아래 전체 폭 (3조가 한 줄) */
+#tab-today.wide{grid-template-columns:minmax(0,1fr)}
+@media (min-width:901px){
+  #tab-today.wide>.col:first-child{grid-template-columns:minmax(0,1fr) minmax(0,1.7fr);align-items:start}
+  #tab-today.wide #setRows{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));align-items:start}
+  #tab-today.wide>.col:first-child>section:first-child{grid-row:span 2}
+  #tab-today.wide>.col:first-child>#genBtn{grid-column:2;align-self:start}
+  #tab-today.wide .groups{grid-template-columns:repeat(3,minmax(0,1fr))}
+  body.member #tab-today.wide>.col:first-child{grid-template-columns:minmax(0,1fr)}
+}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{border-radius:99px;padding:5px 12px;font-size:.86rem;font-weight:600;border:1px solid var(--line-strong);background:var(--surface);color:var(--muted)}
 .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink)}
@@ -289,7 +299,7 @@ body.member .ptabs{grid-template-columns:repeat(3,1fr)}
       <div class="col">
         <section class="card">
           <div class="card-h"><h2 id="resTitle">조 편성</h2><div class="status" id="resStatus"></div></div>
-          <div class="card-b" id="result"><div class="empty">왼쪽에서 날짜·인원·문제 세트를 정하고 '조 · 문제 짜기'를 눌러 주세요.</div></div>
+          <div class="card-b" id="result"><div class="empty">날짜·인원·문제 세트를 정하고 '조 · 문제 짜기'를 눌러 주세요.</div></div>
         </section>
       </div>
     </div>
@@ -427,6 +437,7 @@ const prob=id=>S.D.problems.find(p=>p.id===id);
 const activeMembers=()=>S.D.members.filter(m=>m.active);
 const activeProblems=()=>S.D.problems.filter(p=>p.active).sort((a,b)=>a.type<b.type?-1:a.type>b.type?1:a.no-b.no);
 const pcode=p=>p?`${p.type.toLowerCase()}${p.no}`:"?";
+const pkw=p=>p?(String(p.name||"").trim()||pcode(p)):"?";
 const plabel=p=>p?`${pcode(p)} ${p.name}`.trim():"(지운 질환)";
 const pbadge=p=>p?`<span class="tbadge" style="${tStyle(p.type)}">${esc(pcode(p))}</span>${esc(p.name)}`:"(지운 질환)";
 const dayOf=date=>S.D.days.find(d=>d.date===date);
@@ -584,9 +595,12 @@ function renderStatus(){const share=S.draft&&S.draft.length?`<button class="btn 
   if(S.role==="member")$("resStatus").innerHTML=share;
   else $("resStatus").innerHTML=!S.draft?"":(S.dirty||!S.savedId?`<span class="tag draft">저장 안 됨</span><button class="btn sm primary" type="button" id="saveDay">저장</button>`:`<span class="tag saved">저장됨</span>`)+share;
   const sv=$("saveDay");if(sv)sv.onclick=saveDay;const cp=$("copyDay");if(cp)cp.onclick=copyDay;const im=$("imgDay");if(im)im.onclick=shareImage}
+function nGroupsMax(){if(S.draft&&S.draft.length){const c={};S.draft.forEach(a=>{(c[a.slot]=c[a.slot]||new Set()).add(a.grp)});return Math.max(0,...Object.values(c).map(x=>x.size))}
+  let m=0;for(let s=1;s<=(S.slots||1);s++)m=Math.max(m,parseSizes(S.sizes[s]??autoSizes(S.present.size).join(",")).length);return m}
 function renderResult(){
+  $("tab-today").classList.toggle("wide",nGroupsMax()>=3);
   $("resTitle").textContent=`${md(S.date)} 조 편성`;renderStatus();
-  const el=$("result");if(!S.draft||!S.draft.length){el.innerHTML=`<div class="empty">${S.role==="member"?"아직 이 날 조가 안 짜였어요. 위 날짜 버튼(●)에서 저장된 날을 골라 보세요.":"왼쪽에서 날짜·인원·문제 세트를 정하고 '조 · 문제 짜기'를 눌러 주세요."}</div>`;return}
+  const el=$("result");if(!S.draft||!S.draft.length){el.innerHTML=`<div class="empty">${S.role==="member"?"아직 이 날 조가 안 짜였어요. 위 날짜 버튼(●)에서 저장된 날을 골라 보세요.":"날짜·인원·문제 세트를 정하고 '조 · 문제 짜기'를 눌러 주세요."}</div>`;return}
   const RO=S.role==="member";
   const saved=S.savedId&&!S.dirty;const day=dayOf(S.date);
   const present=[...S.present].map(mem).filter(Boolean);
@@ -639,11 +653,11 @@ async function saveDay(){const v=validate();if(v){toast(v);return}
 function planData(){const day=dayOf(S.date);const skipped=S.savedId&&!S.dirty&&day?(day.skipped||[]):[];
   const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort().filter(s=>!skipped.includes(s)).map(s=>{const rows=S.draft.filter(a=>a.slot===s);
     return {s,groups:[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b).map(g=>{const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);const ts=[];gr.forEach(a=>{const t=(prob(a.problem_id)||{}).type||"?";if(!ts.includes(t))ts.push(t)});
-      return {g,members:grpMembers(gr).map(m=>(mem(m)||{}).name||"?"),types:ts.map(t=>({t,rows:gr.filter(a=>((prob(a.problem_id)||{}).type||"?")===t).map(a=>({name:(mem(a.member_id)||{}).name||"?",code:pcode(prob(a.problem_id)),label:plabel(prob(a.problem_id))}))}))}})}});
+      return {g,members:grpMembers(gr).map(m=>(mem(m)||{}).name||"?"),types:ts.map(t=>({t,rows:gr.filter(a=>((prob(a.problem_id)||{}).type||"?")===t).map(a=>({name:(mem(a.member_id)||{}).name||"?",code:pcode(prob(a.problem_id)),kw:pkw(prob(a.problem_id)),label:plabel(prob(a.problem_id))}))}))}})}});
   return {title:`${md(S.date)} ${S.D.unit} 연습`,set:TYPES().map(t=>({t,items:S.setIds.filter(id=>(prob(id)||{}).type===t).map(id=>prob(id))})).filter(x=>x.items.length),slots}}
 function planText(){const P=planData();const L=[`📋 ${P.title}`,"","[문제 세트]"];
-  for(const x of P.set)L.push(`${x.t}형: ${x.items.map(plabel).join(" · ")}`);
-  for(const sl of P.slots){L.push("",`[${sl.s}타임]`);for(const g of sl.groups){L.push(`${g.g}조 (${g.members.join("·")})`);for(const t of g.types)L.push(`  ${t.t}: `+t.rows.map(r=>`${r.name} ${r.code}`).join(" · "))}}
+  for(const x of P.set)L.push(`${x.t}형: ${x.items.map(pkw).join(" · ")}`);
+  for(const sl of P.slots){L.push("",`[${sl.s}타임]`);for(const g of sl.groups){L.push(`${g.g}조 (${g.members.join("·")})`);for(const t of g.types)L.push(`  ${t.t}: `+t.rows.map(r=>`${r.name} ${r.kw}`).join(" · "))}}
   if(S.D.member_code)L.push("",`피드백 쓰기: ${memberLink()}`);return L.join("\n")}
 async function copyDay(){const txt=planText();
   if(navigator.share&&/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)){try{await navigator.share({text:txt});return}catch(e){if(e&&e.name==="AbortError")return}}
@@ -659,8 +673,8 @@ function drawPlan(P){
     font(24,800);T(P.title,PAD,y,24,800,"#16202a");y+=32;
     font(13);T("조 안에서 형마다 1인 1문제 + 나머지 피드백",PAD,y,13,400,"#667085");y+=26;
     for(const x of P.set){font(14,800);T(`${x.t}형`,PAD,y,14,800,C[x.t]||"#333");font(13.5);
-      const ls=wrap(x.items.map(plabel).join(" · "),W-PAD*2-46);ls.forEach((l,k)=>T(l,PAD+46,y+k*20,13.5,500,"#16202a"));y+=ls.length*20+2;
-      for(const p of x.items.filter(p=>p.related)){font(11.5);const rl=wrap(`${pcode(p)}  ${relShort(p.related)}`,W-PAD*2-46);rl.forEach((l,k)=>T(l,PAD+46,y+k*16,11.5,400,"#8a94a3"));y+=rl.length*16}
+      const ls=wrap(x.items.map(pkw).join(" · "),W-PAD*2-46);ls.forEach((l,k)=>T(l,PAD+46,y+k*20,13.5,500,"#16202a"));y+=ls.length*20+2;
+      for(const p of x.items.filter(p=>p.related)){font(11.5);const rl=wrap(`${pkw(p)}  ${relShort(p.related)}`,W-PAD*2-46);rl.forEach((l,k)=>T(l,PAD+46,y+k*16,11.5,400,"#8a94a3"));y+=rl.length*16}
       y+=8}
     y+=4;
     for(const sl of P.slots){
@@ -674,7 +688,7 @@ function drawPlan(P){
           if(draw){ctx.strokeStyle="#dde3e6";ctx.lineWidth=1;ctx.beginPath();ctx.roundRect?ctx.roundRect(x0+.5,y+.5,cw-1,H-1,10):ctx.rect(x0,y,cw,H);ctx.stroke()}
           let yy=y+10;font(13,700);wrap(`${g.g}조 · ${g.members.join(" ")}`,cw-20).forEach(l=>{T(l,x0+10,yy,13,700,"#16202a");yy+=18});yy+=6;
           for(const t of g.types){T(`${t.t}형`,x0+10,yy+3,11.5,800,C[t.t]||"#333");yy+=20;
-            for(const rr of t.rows){T(rr.name,x0+10,yy,13,500,"#16202a");T(rr.code,x0+cw-10,yy,13,800,"#16202a","right");yy+=19}}});
+            for(const rr of t.rows){T(rr.name,x0+10,yy,13,500,"#16202a");font(13,800);let kw=rr.kw;const kwMax=cw-20-ctx.measureText(rr.name).width-12;while(kw.length>1&&ctx.measureText(kw).width>kwMax)kw=kw.slice(0,-1);if(kw!==rr.kw)kw=kw.slice(0,-1)+"…";T(kw,x0+cw-10,yy,13,800,"#16202a","right");yy+=19}}});
         y+=H+GAP}
       y+=6}
     if(S.D.member_code){T("피드백 쓰기: "+memberLink(),PAD,y,11,400,"#8a94a3");y+=18}
