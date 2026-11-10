@@ -888,8 +888,7 @@ const autoSig=()=>JSON.stringify([S.date,S.draft,[...S.present].sort(),S.sizes,S
 function scheduleAuto(){clearTimeout(S.autoT);if(S.role==="member"||!S.draft||!S.draft.length||S.saving||!(S.dirty||!S.savedId))return;
   if(S.autoFail&&S.autoFail===autoSig())return;S.autoT=setTimeout(()=>saveDay(true),1200)}
 function saveCheck(){const v=validate();if(v)return v;
-  for(let s=1;s<=S.slots;s++){const rows=S.draft.filter(a=>a.slot===s);
-    const byM={};rows.forEach(a=>(byM[a.member_id]=byM[a.member_id]||new Set()).add(a.grp));if(Object.values(byM).some(x=>x.size>1))return `${s}타임에 한 사람이 두 조에 있어요`}
+  for(let s=1;s<=S.slots;s++){const rows=S.draft.filter(a=>a.slot===s);{const seen=new Set();for(const a of rows){const k=a.member_id+"|"+a.problem_id;if(seen.has(k))return `${s}타임에 ${(mem(a.member_id)||{}).name||"?"}이(가) ${pkw(prob(a.problem_id))}을(를) 두 번 풀어요 · 문제를 바꾸거나 세트에 문제를 더 넣어 주세요`;seen.add(k)}}const byM={};rows.forEach(a=>(byM[a.member_id]=byM[a.member_id]||new Set()).add(a.grp));if(Object.values(byM).some(x=>x.size>1))return `${s}타임에 한 사람이 두 조에 있어요`}
   return ""}
 async function saveDay(auto){clearTimeout(S.autoT);if(S.saving||!S.draft||!S.draft.length)return;const v=saveCheck();
   if(v){if(auto===true){S.autoErr=v;S.autoFail=autoSig();renderStatus()}else toast(v);return}
