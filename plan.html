@@ -187,6 +187,9 @@ body.member .ptabs{grid-template-columns:repeat(2,1fr)}
 .gmem select{width:auto;flex:1 1 30%;min-width:0;padding:4px 6px;font-size:.84rem;min-height:30px}
 .trow{font-size:.74rem;font-weight:800;color:var(--tc);padding:6px 10px 2px;border-top:1px solid var(--line);background:color-mix(in srgb,var(--tc) 6%,transparent)}
 .trow+.arow{border-top:0}
+.rel{grid-column:2/-1;font-size:.74rem;color:var(--muted);line-height:1.4;margin-top:-2px}
+.rel::before{content:"초진 ";font-weight:700;color:var(--faint)}
+.prel{grid-column:1/-1;font-size:.82rem!important;padding:5px 8px!important}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.86rem;font-weight:500;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 @media (max-width:440px){.brand h1{display:none}}
@@ -336,7 +339,7 @@ const demo={
   db(){let d=null;try{d=JSON.parse(store("osce-prac-demo")||"null")}catch(e){}
     if(!d){const ms="김가영 이나래 박다솜 최라온 정마루 강바다 조사랑 윤아름 장자운 임차은".split(" ").map((n,i)=>({id:"m"+i,name:n,active:true,sort:i}));
       const nm={A:["만성 치주염","급성 치수염","구강암 의심","턱관절 장애","구강건조증"],B:["하악 발치","봉합","러버댐","실란트","불소도포"],C:["TBI","SRP","치주낭 측정","EPT","마취"]};
-      const ps=[];for(const t of "ABC")nm[t].forEach((x,i)=>ps.push({id:t+(i+1),type:t,no:i+1,name:x,active:true}));
+      const ps=[];for(const t of "ABC")nm[t].forEach((x,i)=>ps.push({id:t+(i+1),type:t,no:i+1,name:x,related:t==="B"?"":(t==="A"?"두근두근 초진 예시 케이스 "+(i+1):"관련 케이스 예시 "+(i+1)),active:true}));
       d={members:ms,problems:ps,days:[]}}
     return d},
   save(d){store("osce-prac-demo",JSON.stringify(d))},
@@ -351,7 +354,7 @@ const api={
   async saveMembers(items){if(!LIVE){const d=demo.db();const keep=items.map((x,i)=>{const id=x.id||("m"+Date.now()+i);return {id,name:x.name,active:x.active!==false,sort:x.sort}});
       const used=new Set(d.days.flatMap(y=>y.assigns.map(a=>a.member_id)));d.members.filter(m=>!keep.some(k=>k.id===m.id)&&used.has(m.id)).forEach(m=>keep.push({...m,active:false}));d.members=keep;demo.save(d);return demo.out(d)}
     return await rpc("prac_save_members",{p_code:S.code,p_unit:unitArg(),p_items:items})},
-  async saveProblems(items){if(!LIVE){const d=demo.db();const keep=items.map((x,i)=>({id:x.id||("p"+Date.now()+i),type:x.type,no:x.no,name:x.name,active:x.active!==false}));
+  async saveProblems(items){if(!LIVE){const d=demo.db();const keep=items.map((x,i)=>({id:x.id||("p"+Date.now()+i),type:x.type,no:x.no,name:x.name,related:x.related||"",active:x.active!==false}));
       const used=new Set(d.days.flatMap(y=>y.assigns.map(a=>a.problem_id)));d.problems.filter(p=>!keep.some(k=>k.id===p.id)&&used.has(p.id)).forEach(p=>keep.push({...p,no:p.no+50,active:false}));d.problems=keep;demo.save(d);return demo.out(d)}
     return await rpc("prac_save_problems",{p_code:S.code,p_unit:unitArg(),p_items:items})},
   async saveDay(date,slots,set,assigns){if(!LIVE){const d=demo.db();let day=d.days.find(x=>x.date===date);const old=day?day.assigns:[];
@@ -508,9 +511,10 @@ function renderSet(){
 /* 형 하나에 질환 하나 더(덜 해 본 순) */
 function pickSetType(t,k){const all=pickSet(k,S.setIds.filter(id=>prob(id).type===t));return all.find(id=>prob(id).type===t&&!S.setIds.includes(id))}
 function markDirty(){if(S.draft)S.dirty=true;renderStatus()}
-function renderStatus(){if(S.role==="member"){$("resStatus").innerHTML=S.savedId?`<button class="btn sm" type="button" id="copyDay">카톡용 복사</button>`:"";const cp=$("copyDay");if(cp)cp.onclick=copyDay;return}
-  $("resStatus").innerHTML=!S.draft?"":S.dirty||!S.savedId?`<span class="tag draft">저장 안 됨</span><button class="btn sm primary" type="button" id="saveDay">저장</button>`:`<span class="tag saved">저장됨</span><button class="btn sm" type="button" id="copyDay">카톡용 복사</button>`;
-  const sv=$("saveDay");if(sv)sv.onclick=saveDay;const cp=$("copyDay");if(cp)cp.onclick=copyDay}
+function renderStatus(){const share=S.draft&&S.draft.length?`<button class="btn sm" type="button" id="copyDay">텍스트</button><button class="btn sm" type="button" id="imgDay">이미지</button>`:"";
+  if(S.role==="member")$("resStatus").innerHTML=share;
+  else $("resStatus").innerHTML=!S.draft?"":(S.dirty||!S.savedId?`<span class="tag draft">저장 안 됨</span><button class="btn sm primary" type="button" id="saveDay">저장</button>`:`<span class="tag saved">저장됨</span>`)+share;
+  const sv=$("saveDay");if(sv)sv.onclick=saveDay;const cp=$("copyDay");if(cp)cp.onclick=copyDay;const im=$("imgDay");if(im)im.onclick=shareImage}
 function renderResult(){
   $("resTitle").textContent=`${md(S.date)} 조 편성`;renderStatus();
   const el=$("result");if(!S.draft||!S.draft.length){el.innerHTML=`<div class="empty">${S.role==="member"?"아직 이 날 조가 안 짜였어요. 위 날짜 버튼(●)에서 저장된 날을 골라 보세요.":"왼쪽에서 날짜·인원·문제 세트를 정하고 '조 · 문제 짜기'를 눌러 주세요."}</div>`;return}
@@ -531,6 +535,7 @@ function renderResult(){
       for(const t of ts){h+=`<div class="trow" style="${tStyle(t)}">${t}형</div>`;
         for(const a of gr.filter(x=>((prob(x.problem_id)||{}).type||"?")===t)){const i=S.draft.indexOf(a);
           h+=`<div class="arow"><i></i><span class="atxt">${esc((mem(a.member_id)||{}).name||"?")}</span>`+(RO?`<span class="atxt">${pbadge(prob(a.problem_id))}</span>`:`<select data-ap="${i}" aria-label="${esc((mem(a.member_id)||{}).name||"")} ${t}형 문제">${pOpts(t,a.problem_id)}</select>`);
+          {const pr=prob(a.problem_id);if(pr&&pr.related)h+=`<div class="rel">${esc(pr.related)}</div>`}
           if(saved&&a.id)h+=`<div class="fb"><textarea data-fb="${a.id}" placeholder="${esc((mem(a.member_id)||{}).name||"")} · ${esc(pcode(prob(a.problem_id)))} 피드백" aria-label="피드백">${esc(a.feedback||"")}</textarea><span class="fbm" data-fbm="${a.id}"></span></div>`;
           h+=`</div>`}}
       h+=`</div>`}
@@ -563,15 +568,57 @@ async function saveDay(){const v=validate();if(v){toast(v);return}
     const byM={};rows.forEach(a=>(byM[a.member_id]=byM[a.member_id]||new Set()).add(a.grp));if(Object.values(byM).some(x=>x.size>1)){toast(`${s}타임에 한 사람이 두 조에 있어요`);return}}
   const slots=Math.max(...S.draft.map(a=>a.slot));
   try{S.D=await api.saveDay(S.date,slots,S.setIds,S.draft.map(a=>({slot:a.slot,grp:a.grp,ord:a.ord,member_id:a.member_id,problem_id:a.problem_id})));S.D.logs=S.D.logs||[];loadDate(S.date);toast("저장했어요 · 피드백 칸이 열렸어요")}catch(e){toast(errText(e))}}
-function copyDay(){const d=dayOf(S.date);if(!d)return;const L=[`📋 ${md(S.date)} ${S.D.unit} 연습`];
-  for(const t of TYPES()){const ids=d.problem_set.filter(id=>(prob(id)||{}).type===t);if(ids.length)L.push(`${t}형: ${ids.map(id=>plabel(prob(id))).join(" · ")}`)}
-  for(let s=1;s<=d.slots;s++){if((d.skipped||[]).includes(s))continue;L.push("",`[${s}타임]`);const rows=d.assigns.filter(a=>a.slot===s);
-    for(const g of [...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b)){const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);const gm=grpMembers(gr);
-      L.push(`${g}조 (${gm.map(m=>(mem(m)||{}).name).join("·")})`);
-      const ts=[];gr.forEach(a=>{const t=(prob(a.problem_id)||{}).type;if(!ts.includes(t))ts.push(t)});
-      for(const t of ts)L.push(`  ${t}: `+gr.filter(a=>(prob(a.problem_id)||{}).type===t).map(a=>`${(mem(a.member_id)||{}).name} ${pcode(prob(a.problem_id))}`).join(" · "))}}
-  const link=S.D.member_code?`\n피드백 쓰기: ${memberLink()}`:"";
-  const txt=L.join("\n")+link;(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast("복사했어요 · 카톡에 붙여 넣으세요"),()=>{prompt("아래 내용을 복사해 주세요",txt)})}
+/* 공유용: 화면에 보이는 편성(저장 전이어도) 기준 */
+function planData(){const day=dayOf(S.date);const skipped=S.savedId&&!S.dirty&&day?(day.skipped||[]):[];
+  const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort().filter(s=>!skipped.includes(s)).map(s=>{const rows=S.draft.filter(a=>a.slot===s);
+    return {s,groups:[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b).map(g=>{const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);const ts=[];gr.forEach(a=>{const t=(prob(a.problem_id)||{}).type||"?";if(!ts.includes(t))ts.push(t)});
+      return {g,members:grpMembers(gr).map(m=>(mem(m)||{}).name||"?"),types:ts.map(t=>({t,rows:gr.filter(a=>((prob(a.problem_id)||{}).type||"?")===t).map(a=>({name:(mem(a.member_id)||{}).name||"?",code:pcode(prob(a.problem_id)),label:plabel(prob(a.problem_id))}))}))}})}});
+  return {title:`${md(S.date)} ${S.D.unit} 연습`,set:TYPES().map(t=>({t,items:S.setIds.filter(id=>(prob(id)||{}).type===t).map(id=>prob(id))})).filter(x=>x.items.length),slots}}
+function planText(){const P=planData();const L=[`📋 ${P.title}`,"","[문제 세트]"];
+  for(const x of P.set)L.push(`${x.t}형: ${x.items.map(plabel).join(" · ")}`);
+  for(const sl of P.slots){L.push("",`[${sl.s}타임]`);for(const g of sl.groups){L.push(`${g.g}조 (${g.members.join("·")})`);for(const t of g.types)L.push(`  ${t.t}: `+t.rows.map(r=>`${r.name} ${r.code}`).join(" · "))}}
+  if(S.D.member_code)L.push("",`피드백 쓰기: ${memberLink()}`);return L.join("\n")}
+async function copyDay(){const txt=planText();
+  if(navigator.share&&/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)){try{await navigator.share({text:txt});return}catch(e){if(e&&e.name==="AbortError")return}}
+  (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast("복사했어요 · 카톡에 붙여 넣으세요"),()=>{prompt("아래 내용을 복사해 주세요",txt)})}
+/* 공유 이미지: 라이브러리 없이 캔버스로 직접 그림 */
+function drawPlan(P){
+  const W=760,PAD=26,GAP=10,F='"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif';
+  const C={A:"#2f6fde",B:"#d0661f",C:"#0f8f82",D:"#7a45c9"};
+  const cv=document.createElement("canvas"),ctx=cv.getContext("2d");
+  const font=(sz,w=400)=>{ctx.font=`${w} ${sz}px ${F}`};
+  const wrap=(text,maxW)=>{const out=[];let line="";for(const ch of String(text)){const t=line+ch;if(ctx.measureText(t).width>maxW&&line){out.push(line);line=ch.trimStart()}else line=t}if(line)out.push(line);return out};
+  const run=(draw)=>{let y=PAD;const T=(txt,x,yy,sz,w,col,align)=>{if(!draw)return;font(sz,w);ctx.fillStyle=col;ctx.textAlign=align||"left";ctx.textBaseline="top";ctx.fillText(txt,x,yy)};
+    font(24,800);T(P.title,PAD,y,24,800,"#16202a");y+=32;
+    font(13);T("조 안에서 형마다 1인 1문제 + 나머지 피드백",PAD,y,13,400,"#667085");y+=26;
+    for(const x of P.set){font(14,800);T(`${x.t}형`,PAD,y,14,800,C[x.t]||"#333");font(13.5);
+      const ls=wrap(x.items.map(plabel).join(" · "),W-PAD*2-46);ls.forEach((l,k)=>T(l,PAD+46,y+k*20,13.5,500,"#16202a"));y+=ls.length*20+2;
+      for(const p of x.items.filter(p=>p.related)){font(11.5);const rl=wrap(`${pcode(p)} 초진: ${p.related}`,W-PAD*2-46);rl.forEach((l,k)=>T(l,PAD+46,y+k*16,11.5,400,"#8a94a3"));y+=rl.length*16}
+      y+=8}
+    y+=4;
+    for(const sl of P.slots){
+      if(draw){ctx.fillStyle="#eef3f2";ctx.beginPath();ctx.roundRect?ctx.roundRect(PAD,y,W-PAD*2,30,8):ctx.rect(PAD,y,W-PAD*2,30);ctx.fill()}
+      T(`${sl.s}타임`,PAD+12,y+7,16,800,"#16202a");y+=40;
+      const n=Math.min(3,sl.groups.length),cw=(W-PAD*2-GAP*(n-1))/n;
+      for(let r=0;r<sl.groups.length;r+=n){const row=sl.groups.slice(r,r+n);
+        const hs=row.map(g=>{font(13,700);const ml=wrap(`${g.g}조 · ${g.members.join(" ")}`,cw-20);return 10+ml.length*18+6+g.types.reduce((a,t)=>a+20+t.rows.length*19,0)+8});
+        const H=Math.max(...hs);
+        row.forEach((g,k)=>{const x0=PAD+k*(cw+GAP);
+          if(draw){ctx.strokeStyle="#dde3e6";ctx.lineWidth=1;ctx.beginPath();ctx.roundRect?ctx.roundRect(x0+.5,y+.5,cw-1,H-1,10):ctx.rect(x0,y,cw,H);ctx.stroke()}
+          let yy=y+10;font(13,700);wrap(`${g.g}조 · ${g.members.join(" ")}`,cw-20).forEach(l=>{T(l,x0+10,yy,13,700,"#16202a");yy+=18});yy+=6;
+          for(const t of g.types){T(`${t.t}형`,x0+10,yy+3,11.5,800,C[t.t]||"#333");yy+=20;
+            for(const rr of t.rows){T(rr.name,x0+10,yy,13,500,"#16202a");T(rr.code,x0+cw-10,yy,13,800,"#16202a","right");yy+=19}}});
+        y+=H+GAP}
+      y+=6}
+    if(S.D.member_code){T("피드백 쓰기: "+memberLink(),PAD,y,11,400,"#8a94a3");y+=18}
+    return y+PAD-10};
+  const H=Math.ceil(run(false));const sc=2;cv.width=W*sc;cv.height=H*sc;ctx.scale(sc,sc);ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);run(true);return cv}
+async function shareImage(){try{const P=planData();const cv=drawPlan(P);
+    const blob=await new Promise(r=>cv.toBlob(r,"image/png"));const name=`연습플랜_${S.date}.png`;
+    let file=null;try{file=new File([blob],name,{type:"image/png"})}catch(e){}
+    if(file&&navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:P.title});return}catch(e){if(e&&e.name==="AbortError")return}}
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);toast("이미지를 저장했어요")}
+  catch(e){toast(errText(e))}}
 const confirmLeave=()=>!(S.draft&&S.dirty)||confirm("저장 안 한 조 편성이 있어요. 버리고 이동할까요?");
 const memberLink=()=>`${location.origin}${location.pathname}?k=${encodeURIComponent(S.D.member_code||"")}`;
 
@@ -598,7 +645,7 @@ function renderStats(){
       <table class="stbl"><thead><tr><th>질환</th><th>직접</th><th>피드백</th><th>마지막으로 푼 날</th></tr></thead><tbody>`;
     for(const p of ps){const s=g2(T.solve,id,p.id),f=g2(T.fb,id,p.id),last=(T.last[id]||{})[p.id];
       h+=`<tr class="click ${s?"":"zero"} ${S.open===p.id?"open":""}" data-op="${p.id}"><td class="nm">${pbadge(p)}</td><td>${s||"0"}</td><td>${f}</td><td class="mono">${last?md(last):"–"}</td></tr>`;
-      if(S.open===p.id){const l=fbs(p.id);h+=`<tr><td colspan="4" class="fbl">${l.length?l.map(x=>`<div class="fbitem"><div class="fbh"><small>${md(x.date)}${x.kind==="a"?` ${x.slot}타임`:""}</small><span class="kind">${x.kind==="a"?"조 짜기":"직접 추가"}</span>${x.kind==="l"?`<button class="x" type="button" data-ldel="${x.id}" aria-label="이 기록 지우기">✕</button>`:""}</div>
+      if(S.open===p.id){const l=fbs(p.id);h+=`<tr><td colspan="4" class="fbl">${p.related?`<div class="hint" style="margin-bottom:6px"><b>관련 초진 케이스</b> ${esc(p.related)}</div>`:""}${l.length?l.map(x=>`<div class="fbitem"><div class="fbh"><small>${md(x.date)}${x.kind==="a"?` ${x.slot}타임`:""}</small><span class="kind">${x.kind==="a"?"조 짜기":"직접 추가"}</span>${x.kind==="l"?`<button class="x" type="button" data-ldel="${x.id}" aria-label="이 기록 지우기">✕</button>`:""}</div>
         ${x.kind==="l"&&x.obs.length?`<div class="hint">같이 본 사람: ${x.obs.map(o=>esc((mem(o)||{}).name||"?")).join(", ")}</div>`:""}
         <textarea data-efb="${x.kind}:${x.id}" placeholder="피드백 적기" aria-label="피드백">${esc(x.fb||"")}</textarea><span class="fbm hint" data-efm="${x.id}"></span></div>`).join(""):`<span class="hint">아직 직접 푼 적이 없어요. 위 '기록 추가'로 넣을 수 있어요.</span>`}</td></tr>`}}
     h+=`</tbody></table>`;$("memTbl").innerHTML=ps.length?h:`<div class="empty">질환이 없어요.</div>`;
@@ -627,10 +674,11 @@ function renderSetup(){
   const types=[...new Set(["A","B","C",...PROB.map(p=>p.type)])];
   $("probMeta").textContent=types.map(t=>`${t} ${PROB.filter(p=>p.type===t).length}`).join(" · ");
   $("probList").innerHTML=types.map(t=>{const list=PROB.map((p,i)=>({p,i})).filter(x=>x.p.type===t).sort((a,b)=>a.p.no-b.p.no);
-    return `<div class="tsec" style="${tStyle(t)}"><h3>${t}형</h3>${list.map(({p,i})=>`<div class="prow"><input type="number" min="1" max="49" data-pn="${i}" value="${p.no}" aria-label="번호"><input data-pt="${i}" value="${esc(p.name)}" placeholder="질환 이름" aria-label="질환 이름"><button class="x" type="button" data-px="${i}" aria-label="지우기">✕</button></div>`).join("")}
+    return `<div class="tsec" style="${tStyle(t)}"><h3>${t}형</h3>${list.map(({p,i})=>`<div class="prow"><input type="number" min="1" max="49" data-pn="${i}" value="${p.no}" aria-label="번호"><input data-pt="${i}" value="${esc(p.name)}" placeholder="질환 이름" aria-label="질환 이름"><button class="x" type="button" data-px="${i}" aria-label="지우기">✕</button><input class="prel" data-pr="${i}" value="${esc(p.related||"")}" placeholder="관련 초진 케이스 (예: 두근두근 케이스 이름)" aria-label="관련 초진 케이스"></div>`).join("")}
       <button class="btn sm" type="button" data-padd="${t}">+ ${t}형 질환</button></div>`}).join("");
   $("probList").querySelectorAll("[data-pn]").forEach(i=>i.oninput=()=>{PROB[Number(i.dataset.pn)].no=Number(i.value)});
   $("probList").querySelectorAll("[data-pt]").forEach(i=>i.oninput=()=>{PROB[Number(i.dataset.pt)].name=i.value});
+  $("probList").querySelectorAll("[data-pr]").forEach(i=>i.oninput=()=>{PROB[Number(i.dataset.pr)].related=i.value});
   $("probList").querySelectorAll("[data-px]").forEach(b=>b.onclick=()=>{PROB.splice(Number(b.dataset.px),1);renderSetup()});
   $("probList").querySelectorAll("[data-padd]").forEach(b=>b.onclick=()=>{const t=b.dataset.padd;const no=Math.max(0,...PROB.filter(p=>p.type===t).map(p=>p.no))+1;PROB.push({id:null,type:t,no,name:"",active:true});renderSetup();const ins=$("probList").querySelectorAll(`[data-pt]`);ins[ins.length-1]&&[...ins].find(x=>PROB[Number(x.dataset.pt)].type===t&&PROB[Number(x.dataset.pt)].no===no)?.focus()})}
 $("memAdd").onclick=()=>{const v=$("memNew").value.split(/[,\n]/).map(s=>s.trim()).filter(Boolean);if(!v.length)return;v.forEach(n=>MEM.push({id:null,name:n.slice(0,20),active:true}));$("memNew").value="";renderSetup()};
@@ -639,7 +687,7 @@ $("memSave").onclick=async()=>{const m=$("memMsg");const items=MEM.map((x,i)=>({
   if(items.some(x=>!x.name)){m.className="msg err";m.textContent="빈 이름이 있어요.";return}
   if(new Set(items.map(x=>x.name)).size!==items.length){m.className="msg err";m.textContent="같은 이름이 두 번 있어요. 성까지 써 주세요.";return}
   try{S.D=await api.saveMembers(items);setupInit();m.className="msg";m.textContent="저장했어요";toast("조원 저장했어요");if(!S.savedId)S.present=new Set(activeMembers().map(x=>x.id))}catch(e){m.className="msg err";m.textContent=errText(e)}};
-$("probSave").onclick=async()=>{const m=$("probMsg");const items=PROB.map(p=>({id:p.id,type:p.type,no:Number(p.no),name:String(p.name||"").trim(),active:true}));
+$("probSave").onclick=async()=>{const m=$("probMsg");const items=PROB.map(p=>({id:p.id,type:p.type,no:Number(p.no),name:String(p.name||"").trim(),related:String(p.related||"").trim(),active:true}));
   if(items.some(p=>!(p.no>=1&&p.no<=49))){m.className="msg err";m.textContent="번호는 1–49로 적어 주세요.";return}
   const keys=items.map(p=>p.type+p.no);if(new Set(keys).size!==keys.length){m.className="msg err";m.textContent=`같은 번호가 두 번 있어요: ${keys.filter((k,i)=>keys.indexOf(k)!==i).join(", ")}`;return}
   try{S.D=await api.saveProblems(items);setupInit();m.className="msg";m.textContent="저장했어요";toast("질환 저장했어요")}catch(e){m.className="msg err";m.textContent=errText(e)}};
