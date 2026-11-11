@@ -116,10 +116,20 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .seg3{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--sunk);padding:3px;border-radius:10px}
 .seg3 button{padding:6px 0;border-radius:8px;font-weight:600;font-size:.84rem;color:var(--muted)}
 .seg3 button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.1)}
-.sizes{display:grid;gap:6px}
-.sizes label{display:grid;grid-template-columns:4.2em minmax(0,1fr) auto;gap:8px;align-items:center;font-size:.84rem;font-weight:600}
-.sizes input{padding:6px 8px;font-family:var(--t-mono)}
-.sizes .bad input{border-color:var(--out)}
+.sizes{display:grid;gap:8px}
+.szrow{border:1px solid var(--line);border-radius:12px;padding:8px 10px;display:grid;gap:8px}
+.szrow.bad{border-color:var(--out);background:var(--out-soft)}
+.szhead{display:flex;align-items:center;gap:8px;font-size:.86rem;font-weight:700}
+.szhead .st{margin-left:auto;font-family:var(--t-mono);font-size:.8rem;font-weight:600;color:var(--muted)}
+.szrow.bad .st{color:var(--out)}
+.szhead .btn{padding:3px 9px;font-size:.76rem}
+.szgrps{display:flex;flex-wrap:wrap;gap:6px}
+.szg{display:inline-flex;align-items:center;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);overflow:hidden}
+.szg em{font-style:normal;font-size:.72rem;color:var(--muted);padding:0 2px 0 8px}
+.szg b{font-family:var(--t-mono);font-size:1rem;min-width:1.4em;text-align:center}
+.szg button{width:34px;height:36px;font-size:1.1rem;font-weight:700;color:var(--accent-ink)}
+.szg button:active{background:var(--accent-soft)}
+.szadd{border:1px dashed var(--line-strong);border-radius:10px;padding:0 12px;height:38px;font-size:.82rem;font-weight:600;color:var(--muted);background:none}
 .setrow{display:grid;grid-template-columns:2.2em minmax(0,1fr);gap:6px;align-items:center}
 .setrow b{font-family:var(--t-mono);font-size:.82rem;color:var(--muted);text-align:center}
 .tbadge{display:inline-block;font-family:var(--t-mono);font-weight:700;font-size:.74rem;border-radius:6px;padding:1px 6px;background:var(--tb);color:var(--ti);margin-right:4px}
@@ -407,8 +417,8 @@ body.member #probList input[readonly]{background:var(--sunk);color:var(--muted);
             <div class="bk" id="bkList"></div>
             <div class="field adm"><span>오늘 나오는 사람 <em id="presentN" style="font-style:normal"></em></span><div class="chips" id="presentChips"></div></div>
             <div class="field adm"><span>타임 수</span><div class="seg3" id="slotSeg"></div></div>
-            <div class="field adm"><span>조 나누기 (타임마다 · 쉼표로 인원)</span><div class="sizes" id="sizes"></div>
-              <span class="hint">예: 10명 → 3,3,4. 조 안에서는 1인 1문제씩 풀고, 나머지 사람이 피드백해요.</span></div>
+            <div class="field adm"><span>조 나누기 (타임마다 조별 인원)</span><div class="sizes" id="sizes"></div>
+              <span class="hint">−/+로 조별 인원 조정 · 조 안에서는 1인 1문제씩 풀고, 나머지 사람이 피드백해요.</span></div>
           </div>
         </section>
         <section class="card adm">
@@ -610,6 +620,23 @@ const g2=(o,a,b)=>(o[a]&&o[a][b])||0;
 /* 인원 → 조 크기 (3~4명 위주) */
 function autoSizes(n){if(n<=0)return [];if(n<=4)return [n];const g=Math.floor(n/3),base=Math.floor(n/g),extra=n%g;return Array.from({length:g},(_,i)=>base+(i<extra?1:0))}
 const parseSizes=s=>String(s||"").split(/[,\s/]+/).map(Number).filter(x=>x>0);
+/* 조 나누기: 타임별 조 인원 스테퍼 (쉼표 입력 대신 — 폰 숫자패드에 쉼표가 없음) */
+function sizeArr(s){const v=S.sizes[s];return v==null?autoSizes(S.present.size):parseSizes(v)}
+function sizeState(sum){const n=S.present.size,d=n-sum;return d===0?`${sum}/${n}명 ✓`:d>0?`${d}명 남음`:`${-d}명 초과`}
+function renderSizes(){const n=S.present.size;let h="";
+  for(let s=1;s<=S.slots;s++){const a=sizeArr(s),sum=a.reduce((x,y)=>x+y,0);
+    h+=`<div class="szrow${sum!==n?" bad":""}" data-row="${s}"><div class="szhead"><span>${s}타임</span>`+
+      (s>1?`<button class="btn sm ghost" type="button" data-cp="${s}">↑ 위와 같게</button>`:"")+
+      `<button class="btn sm ghost" type="button" data-au="${s}">균등</button><span class="st">${sizeState(sum)}</span></div><div class="szgrps">`+
+      a.map((k,g)=>`<span class="szg"><em>${g+1}조</em><button type="button" data-s="${s}" data-g="${g}" data-d="-1" aria-label="${s}타임 ${g+1}조 한 명 빼기">−</button><b>${k}</b><button type="button" data-s="${s}" data-g="${g}" data-d="1" aria-label="${s}타임 ${g+1}조 한 명 더하기">+</button></span>`).join("")+
+      `<button class="szadd" type="button" data-add="${s}">+ 조</button></div></div>`}
+  $("sizes").innerHTML=h;
+  const set=(s,a)=>{S.sizes[s]=a.filter(x=>x>0).join(",");markDirty();renderSizes();renderSet()};
+  $("sizes").querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{const s=b.dataset.s,a=sizeArr(s);a[+b.dataset.g]+=+b.dataset.d;set(s,a)});
+  $("sizes").querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{const s=b.dataset.add,a=sizeArr(s),left=n-a.reduce((x,y)=>x+y,0);a.push(left>0?Math.min(left,4):1);set(s,a)});
+  $("sizes").querySelectorAll("[data-au]").forEach(b=>b.onclick=()=>{const s=b.dataset.au,g=sizeArr(s).length||1;
+    const a=g>n?autoSizes(n):Array.from({length:g},(_,i)=>Math.floor(n/g)+(i<n%g?1:0));set(s,a)});
+  $("sizes").querySelectorAll("[data-cp]").forEach(b=>b.onclick=()=>{const s=+b.dataset.cp;set(s,sizeArr(s-1))})}
 function slotSizes(s){const v=parseSizes(S.sizes[s]);return v.length?v.sort((a,b)=>b-a):autoSizes(S.present.size)}
 const maxSize=()=>{let m=0;for(let s=1;s<=S.slots;s++)m=Math.max(m,...slotSizes(s),0);return m};
 const TYPES=()=>[...new Set(activeProblems().map(p=>p.type))];
@@ -778,10 +805,7 @@ function renderToday(){
   $("slotSeg").parentElement.hidden=!!(S.draft&&S.draft.length);
   $("slotSeg").innerHTML=[1,2,3,4].map(n=>`<button type="button" data-n="${n}" aria-pressed="${S.slots===n}">${n}타임</button>`).join("");
   $("slotSeg").querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>{S.slots=Number(b.dataset.n);markDirty();renderToday()});
-  let sz="";for(let s=1;s<=S.slots;s++){const v=S.sizes[s]??autoSizes(S.present.size).join(",");const sum=parseSizes(v).reduce((a,b)=>a+b,0);
-    sz+=`<label class="${sum!==S.present.size?"bad":""}"><span>${s}타임</span><input data-sz="${s}" value="${esc(v)}" inputmode="numeric" aria-label="${s}타임 조 인원"><span class="hint">${sum}/${S.present.size}명</span></label>`}
-  $("sizes").innerHTML=sz;
-  $("sizes").querySelectorAll("[data-sz]").forEach(i=>{i.oninput=()=>{S.sizes[i.dataset.sz]=i.value;const sum=parseSizes(i.value).reduce((a,b)=>a+b,0);i.parentElement.classList.toggle("bad",sum!==S.present.size);i.parentElement.querySelector(".hint").textContent=`${sum}/${S.present.size}명`;markDirty();renderSet()}});
+  renderSizes();
   renderSet();renderResult();
   $("dayH").textContent=S.edit?"날짜 · 인원":"날짜";$("dayMeta").textContent=S.role==="member"||!S.edit?"":S.savedId?"저장된 날":"새로 짜기"}
 function renderSet(){
