@@ -129,6 +129,11 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .szg b{font-family:var(--t-mono);font-size:1rem;min-width:1.4em;text-align:center}
 .szg button{width:34px;height:36px;font-size:1.1rem;font-weight:700;color:var(--accent-ink)}
 .szg button:active{background:var(--accent-soft)}
+.szwho{display:flex;align-items:center;gap:6px;width:100%;text-align:left;font-size:.8rem;color:var(--muted);padding:2px 0}
+.szwho b{color:var(--held);font-weight:700}
+.szwho span{margin-left:auto;font-size:.76rem;color:var(--accent-ink);font-weight:600;white-space:nowrap}
+.szchips .chip[aria-pressed="false"]{text-decoration:line-through;opacity:.6}
+.szstale{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.8rem;font-weight:600;color:var(--held);background:var(--held-soft);border-radius:8px;padding:6px 8px}
 .szadd{border:1px dashed var(--line-strong);border-radius:10px;padding:0 12px;height:38px;font-size:.82rem;font-weight:600;color:var(--muted);background:none}
 .setrow{display:grid;grid-template-columns:2.2em minmax(0,1fr);gap:6px;align-items:center}
 .setrow b{font-family:var(--t-mono);font-size:.82rem;color:var(--muted);text-align:center}
@@ -418,7 +423,7 @@ body.member #probList input[readonly]{background:var(--sunk);color:var(--muted);
             <div class="field adm"><span>오늘 나오는 사람 <em id="presentN" style="font-style:normal"></em></span><div class="chips" id="presentChips"></div></div>
             <div class="field adm"><span>타임 수</span><div class="seg3" id="slotSeg"></div></div>
             <div class="field adm"><span>조 나누기 (타임마다 조별 인원)</span><div class="sizes" id="sizes"></div>
-              <span class="hint">−/+로 조별 인원 조정 · 조 안에서는 1인 1문제씩 풀고, 나머지 사람이 피드백해요.</span></div>
+              <span class="hint">👥 눌러서 그 타임만 빠지는 사람 빼기 · −/+로 조별 인원 조정 · 조 안에서는 1인 1문제씩 풀고, 나머지 사람이 피드백해요.</span></div>
           </div>
         </section>
         <section class="card adm">
@@ -506,7 +511,7 @@ const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()
 const cfg=window.OSCE_CONFIG||{};
 const LIVE=!!(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY&&window.supabase);
 const sb=LIVE?window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY):null;
-const S={code:"",role:"",team:"",unit:"",D:null,tab:"today",date:ymd(),present:new Set(),slots:2,sizes:{},setIds:[],cfg:{},setSlot:1,draft:null,savedId:null,dirty:false,sel:null,open:null,rules:{}};
+const S={code:"",role:"",team:"",unit:"",D:null,tab:"today",date:ymd(),present:new Set(),absent:{},szOpen:{},slots:2,sizes:{},setIds:[],cfg:{},setSlot:1,draft:null,savedId:null,dirty:false,sel:null,open:null,rules:{}};
 const unitArg=()=>S.role==="admin"?S.unit:null;
 async function rpc(fn,args){const {data,error}=await sb.rpc(fn,args);if(error)throw new Error(error.message||String(error));return data}
 const demo={
@@ -621,23 +626,35 @@ const g2=(o,a,b)=>(o[a]&&o[a][b])||0;
 function autoSizes(n){if(n<=0)return [];if(n<=4)return [n];const g=Math.floor(n/3),base=Math.floor(n/g),extra=n%g;return Array.from({length:g},(_,i)=>base+(i<extra?1:0))}
 const parseSizes=s=>String(s||"").split(/[,\s/]+/).map(Number).filter(x=>x>0);
 /* 조 나누기: 타임별 조 인원 스테퍼 (쉼표 입력 대신 — 폰 숫자패드에 쉼표가 없음) */
-function sizeArr(s){const v=S.sizes[s];return v==null?autoSizes(S.present.size):parseSizes(v)}
-function sizeState(sum){const n=S.present.size,d=n-sum;return d===0?`${sum}/${n}명 ✓`:d>0?`${d}명 남음`:`${-d}명 초과`}
-function renderSizes(){const n=S.present.size;let h="";
-  for(let s=1;s<=S.slots;s++){const a=sizeArr(s),sum=a.reduce((x,y)=>x+y,0);
+/* 타임별 출석: S.present(그날 나오는 사람) 중 S.absent[s]에 든 사람은 그 타임만 빠짐 */
+const absOf=s=>S.absent[s]||(S.absent[s]=new Set());
+const presentIn=s=>[...S.present].filter(id=>!absOf(s).has(id));
+const nIn=s=>presentIn(s).length;
+function sizeArr(s){const v=S.sizes[s];return v==null?autoSizes(nIn(s)):parseSizes(v)}
+function sizeState(sum,s){const n=nIn(s),d=n-sum;return d===0?`${sum}/${n}명 ✓`:d>0?`${d}명 남음`:`${-d}명 초과`}
+function slotStale(s){if(!S.draft||!S.draft.some(a=>a.slot===s))return false;const d=new Set(S.draft.filter(a=>a.slot===s).map(a=>a.member_id)),p=presentIn(s);return d.size!==p.length||p.some(id=>!d.has(id))}
+function renderSizes(){let h="";const nm=id=>esc((mem(id)||{}).name||"?");
+  for(let s=1;s<=S.slots;s++){const n=nIn(s),a=sizeArr(s),sum=a.reduce((x,y)=>x+y,0),out=[...S.present].filter(id=>absOf(s).has(id)),op=!!S.szOpen[s];
     h+=`<div class="szrow${sum!==n?" bad":""}" data-row="${s}"><div class="szhead"><span>${s}타임</span>`+
       (s>1?`<button class="btn sm ghost" type="button" data-cp="${s}">↑ 위와 같게</button>`:"")+
-      `<button class="btn sm ghost" type="button" data-au="${s}">균등</button><span class="st">${sizeState(sum)}</span></div><div class="szgrps">`+
+      `<button class="btn sm ghost" type="button" data-au="${s}">균등</button><span class="st">${sizeState(sum,s)}</span></div>`+
+      `<button type="button" class="szwho${out.length?" has":""}" data-who="${s}" aria-expanded="${op}">👥 ${n}명${out.length?` · <b>${out.map(nm).join("·")} 빠짐</b>`:" 다 나옴"}<span>${op?"닫기 ▴":"빠지는 사람 ▾"}</span></button>`+
+      (op?`<div class="chips szchips">${[...S.present].sort((x,y)=>S.D.members.findIndex(m=>m.id===x)-S.D.members.findIndex(m=>m.id===y)).map(id=>`<button type="button" class="chip sm" data-ab="${s}|${id}" aria-pressed="${!absOf(s).has(id)}">${nm(id)}</button>`).join("")}</div>`:"")+
+      (slotStale(s)?`<div class="szstale">조 편성과 나오는 사람이 달라요 <button class="btn sm primary" type="button" data-rs="${s}">🎲 ${s}타임만 다시</button></div>`:"")+
+      `<div class="szgrps">`+
       a.map((k,g)=>`<span class="szg"><em>${g+1}조</em><button type="button" data-s="${s}" data-g="${g}" data-d="-1" aria-label="${s}타임 ${g+1}조 한 명 빼기">−</button><b>${k}</b><button type="button" data-s="${s}" data-g="${g}" data-d="1" aria-label="${s}타임 ${g+1}조 한 명 더하기">+</button></span>`).join("")+
       `<button class="szadd" type="button" data-add="${s}">+ 조</button></div></div>`}
   $("sizes").innerHTML=h;
   const set=(s,a)=>{S.sizes[s]=a.filter(x=>x>0).join(",");markDirty();renderSizes();renderSet()};
+  $("sizes").querySelectorAll("[data-who]").forEach(b=>b.onclick=()=>{const s=b.dataset.who;S.szOpen[s]=!S.szOpen[s];renderSizes()});
+  $("sizes").querySelectorAll("[data-ab]").forEach(b=>b.onclick=()=>{const [s,id]=b.dataset.ab.split("|"),A=absOf(s);A.has(id)?A.delete(id):A.add(id);delete S.sizes[s];markDirty();renderSizes();renderSet()});
+  $("sizes").querySelectorAll("[data-rs]").forEach(b=>b.onclick=()=>reSlot(Number(b.dataset.rs)));
   $("sizes").querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{const s=b.dataset.s,a=sizeArr(s);a[+b.dataset.g]+=+b.dataset.d;set(s,a)});
   $("sizes").querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{const s=b.dataset.add,a=sizeArr(s),left=n-a.reduce((x,y)=>x+y,0);a.push(left>0?Math.min(left,4):1);set(s,a)});
   $("sizes").querySelectorAll("[data-au]").forEach(b=>b.onclick=()=>{const s=b.dataset.au,g=sizeArr(s).length||1;
     const a=g>n?autoSizes(n):Array.from({length:g},(_,i)=>Math.floor(n/g)+(i<n%g?1:0));set(s,a)});
   $("sizes").querySelectorAll("[data-cp]").forEach(b=>b.onclick=()=>{const s=+b.dataset.cp;set(s,sizeArr(s-1))})}
-function slotSizes(s){const v=parseSizes(S.sizes[s]);return v.length?v.sort((a,b)=>b-a):autoSizes(S.present.size)}
+function slotSizes(s){const v=parseSizes(S.sizes[s]);return v.length?v.sort((a,b)=>b-a):autoSizes(nIn(s))}
 const maxSize=()=>{let m=0;for(let s=1;s<=S.slots;s++)m=Math.max(m,...slotSizes(s),0);return m};
 const TYPES=()=>[...new Set(activeProblems().map(p=>p.type))];
 /* 타임마다 {rounds:[진행 순서 형들], set:[문제 id]} */
@@ -691,7 +708,7 @@ function generate(only){
       rows.forEach(a=>{(tSolved[a.member_id]=tSolved[a.member_id]||new Set()).add(a.problem_id);for(const o of g)if(o!==a.member_id){(tSeen[o]=tSeen[o]||{});tSeen[o][a.problem_id]=(tSeen[o][a.problem_id]||0)+1}});
       for(let x=0;x<g.length;x++)for(let y=x+1;y<g.length;y++){const k=pk(g[x],g[y]);tPair[k]=(tPair[k]||0)+1}})}
   for(let s=only||1;s<=(only||S.slots);s++){
-    const sizes=slotSizes(s),mn=Math.min(...sizes);const RR=cfgOf(s).rounds,rIdx=RR.map((_,i)=>i).filter(i=>rsetOf(s,i).length);
+    const present=presentIn(s);const sizes=slotSizes(s),mn=Math.min(...sizes);const RR=cfgOf(s).rounds,rIdx=RR.map((_,i)=>i).filter(i=>rsetOf(s,i).length);
     let best=null;
     for(let it=0;it<1500;it++){const q=shuffle(present.slice());let i=0,cost=Math.random()*.1;const gs=sizes.map(k=>{const g=q.slice(i,i+k);i+=k;return g});
       for(const g of gs){for(let a=0;a<g.length;a++)for(let b=a+1;b<g.length;b++){const k=pk(g[a],g[b]);const c=(T.pair[k]||0)+(tPair[k]||0)*3;cost+=c*c}
@@ -775,10 +792,11 @@ function loadDate(date){
   if(d){S.savedId=d.id;S.slots=d.slots;S.setIds=d.problem_set.slice();S.draft=d.assigns.map(a=>({...a}));S.dirty=false;
     S.cfg={};const dc=d.cfg||{};for(let s=1;s<=d.slots;s++){if(dc[s]&&Array.isArray(dc[s].rounds))S.cfg[s]={rounds:dc[s].rounds.slice(),rsets:Array.isArray(dc[s].rsets)?dc[s].rsets.map(x=>x.slice()):deriveRsets(d,s,dc[s].rounds),set:(dc[s].set||d.problem_set).slice()};
       else{const g1=d.assigns.filter(a=>a.slot===s);const gs=[...new Set(g1.map(a=>a.grp))].sort((a,b)=>a-b);const r=roundsOf(g1.filter(a=>a.grp===gs[0])).map(R=>R.t);S.cfg[s]={rounds:r.length?r:TYPES(),rsets:r.length?deriveRsets(d,s,r):undefined,set:d.problem_set.slice()}}}
-    S.present=new Set(d.assigns.map(a=>a.member_id));S.sizes={};
+    S.present=new Set(d.assigns.map(a=>a.member_id));S.sizes={};S.absent={};S.szOpen={};
+    for(let s=1;s<=d.slots;s++){const ids=new Set(d.assigns.filter(a=>a.slot===s).map(a=>a.member_id));S.absent[s]=new Set([...S.present].filter(id=>!ids.has(id)));if(S.absent[s].size)S.szOpen[s]=true}
     for(let s=1;s<=d.slots;s++){const rows=d.assigns.filter(a=>a.slot===s);const grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);S.sizes[s]=grps.map(g=>grpMembers(rows.filter(a=>a.grp===g)).length).join(",")}}
-  else if(S.role==="member"){S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set();S.setIds=[];S.cfg={}}
-  else{S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set(activeMembers().map(m=>m.id));S.slots=S.slots||2;S.sizes={};
+  else if(S.role==="member"){S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set();S.absent={};S.setIds=[];S.cfg={}}
+  else{S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set(activeMembers().map(m=>m.id));S.absent={};S.szOpen={};S.slots=S.slots||2;S.sizes={};
     const base=pickSet(Math.max(3,maxSize()));S.cfg={};for(let s=1;s<=S.slots;s++)S.cfg[s]={rounds:TYPES(),set:base.slice()}}
   renderToday();loadBookings()}
 async function loadBookings(){const el=$("bkList");el.innerHTML="";const list=await api.bookings(S.date,S.D.teams||[]);
@@ -849,7 +867,7 @@ function renderStatus(){const multi=S.draft&&new Set(S.draft.map(a=>a.slot)).siz
   scheduleAuto();
   const sv=$("saveDay");if(sv)sv.onclick=saveDay;const cp=$("copyDay");if(cp)cp.onclick=copyDay;const im=$("imgDay");if(im)im.onclick=shareImage}
 function nGroupsMax(){if(S.draft&&S.draft.length){const c={};S.draft.forEach(a=>{(c[a.slot]=c[a.slot]||new Set()).add(a.grp)});return Math.max(0,...Object.values(c).map(x=>x.size))}
-  let m=0;for(let s=1;s<=(S.slots||1);s++)m=Math.max(m,parseSizes(S.sizes[s]??autoSizes(S.present.size).join(",")).length);return m}
+  let m=0;for(let s=1;s<=(S.slots||1);s++)m=Math.max(m,sizeArr(s).length);return m}
 function renderResult(){
   $("tab-today").classList.toggle("wide",nGroupsMax()>=3);
   $("resTitle").textContent=`${md(S.date)} 조 편성`;renderStatus();
@@ -859,7 +877,7 @@ function renderResult(){
   const present=[...S.present].map(mem).filter(Boolean);
   const pOpts=(t,sel,sl)=>{const ids=[...new Set([...setOf(t,sl),sel])],o=p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(plabel(p))}</option>`;const rest=activeProblems().filter(p=>!ids.includes(p.id)).sort((a,b)=>(a.type===t?0:1)-(b.type===t?0:1));
     return ids.map(id=>prob(id)).filter(Boolean).map(o).join("")+(rest.length?`<optgroup label="세트 밖 질환">${rest.map(o).join("")}</optgroup>`:"")};
-  const mOpts=sel=>present.map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}</option>`).join("");
+  const mOpts=(sel,sl)=>(sl?presentIn(sl).map(mem).filter(Boolean):present).map(m=>`<option value="${m.id}" ${m.id===sel?"selected":""}>${esc(m.name)}</option>`).join("");
   let h="";const slots=[...new Set(S.draft.map(a=>a.slot))].sort((a,b)=>a-b);
   if(!slots.includes(S.vslot))S.vslot=slots[0];
   if(slots.length>1||!RO){const ix=slots.indexOf(S.vslot);
@@ -879,7 +897,7 @@ function renderResult(){
       if(folded){h+=`<button type="button" class="grp folded" style="${gc}" data-gt="${gk(g)}" aria-expanded="false"><span class="gno">${g}조</span><span class="gnames">${gm.map(m=>esc((mem(m)||{}).name||"?")).join(" · ")}</span><span class="gtog">펼치기 ▾</span></button>`;continue}
       h+=`<div class="grp ${mine?"mine":""}" style="${gc}"><div class="grp-h"><span class="gno">${g}조</span>${mine?`<span class="mytag">내 조</span>`:""}<span class="gsub">${gm.length}명 · 형마다 1인 1문제 + 피드백 ${gm.length-1}번</span>${myG!==undefined&&!mine?`<button type="button" class="gtog" data-gt="${gk(g)}" aria-expanded="true">접기 ▴</button>`:""}</div>`;
       h+=RO?`<div class="gmem">${gm.map(m=>esc((mem(m)||{}).name||"?")).join(" · ")}</div>`
-        :`<div class="gmem">${gm.map(m=>`<select data-gm="${s}|${m}" aria-label="${s}타임 ${g}조 사람">${mOpts(m)}</select>`).join("")}</div>`;
+        :`<div class="gmem">${gm.map(m=>`<select data-gm="${s}|${m}" aria-label="${s}타임 ${g}조 사람">${mOpts(m,s)}</select>`).join("")}</div>`;
       for(const R of roundsOf(gr)){const t=R.t;h+=`<div class="trow" style="${tStyle(t)}">${R.n}. ${t}형</div>`;
         for(const a of R.rows){const i=S.draft.indexOf(a);
           h+=`<div class="arow"><i></i><span class="atxt">${esc((mem(a.member_id)||{}).name||"?")}</span>`+(RO?`<span class="atxt">${pbadge(prob(a.problem_id))}</span>`:`<select data-ap="${i}" aria-label="${esc((mem(a.member_id)||{}).name||"")} ${t}형 문제">${pOpts(t,a.problem_id,a.slot)}</select>`);
@@ -910,9 +928,9 @@ function renderResult(){
 function addSlot(){if(S.present.size<2){toast("나오는 사람을 2명 이상 골라 주세요.");return}
   const n=Math.max(0,...(S.draft||[]).map(a=>a.slot))+1;if(n>6){toast("타임은 6개까지예요");return}
   for(const id of S.draft.map(a=>a.member_id))if(!S.present.has(id)){toast("나오는 사람 목록이 바뀌었어요 · 전체 다시 짜기를 써 주세요");return}
-  S.slots=n;S.sizes[n]=S.sizes[n]??autoSizes(S.present.size).join(",");
+  S.slots=n;S.sizes[n]=S.sizes[n]??autoSizes(nIn(n)).join(",");
   cfgOf(n);fillSlotSet(n);S.draft=generate(n);S.setSlot=n;S.vslot=n;S.dirty=true;renderToday();toast(`${n}타임을 짰어요 (앞 타임은 그대로) · 자동 저장돼요`)}
-function reSlot(v){const sum=parseSizes(S.sizes[v]??autoSizes(S.present.size).join(",")).reduce((a,b)=>a+b,0);if(sum!==S.present.size){toast(`${v}타임 조 인원 합(${sum})이 나오는 사람 수(${S.present.size})와 달라요.`);return}
+function reSlot(v){if(nIn(v)<2){toast(`${v}타임에 나오는 사람을 2명 이상 골라 주세요.`);return}const sum=sizeArr(v).reduce((a,b)=>a+b,0);if(sum!==nIn(v)){toast(`${v}타임 조 인원 합(${sum})이 그 타임 나오는 사람 수(${nIn(v)})와 달라요.`);return}
   if(S.savedId&&!confirm(`${v}타임만 새로 짤까요? (다른 타임은 그대로)`))return;
   fillSlotSet(v);S.draft=generate(v);S.vslot=v;S.dirty=true;renderToday();toast(`${v}타임만 다시 짰어요 · 자동 저장돼요`)}
 {let sx=0,sy=0;const r=document.getElementById("result");if(r){r.addEventListener("touchstart",e=>{const t=e.touches[0];sx=t.clientX;sy=t.clientY},{passive:true});
@@ -921,17 +939,18 @@ function reSlot(v){const sum=parseSizes(S.sizes[v]??autoSizes(S.present.size).jo
 const GCOL=["#2563eb","#e8590c","#7c3aed","#0d9488","#db2777","#65a30d"];
 const skipNote=d=>d&&(d.skipped||[]).length?`<div class="hint">${d.skipped.join("·")}타임은 '안 함'으로 표시돼 기록에서 빠져요.</div>`:"";
 function validate(){if(S.present.size<2)return "나오는 사람을 2명 이상 골라 주세요.";
-  for(let s=1;s<=S.slots;s++){const sum=parseSizes(S.sizes[s]??autoSizes(S.present.size).join(",")).reduce((a,b)=>a+b,0);if(sum!==S.present.size)return `${s}타임 조 인원 합(${sum})이 나오는 사람 수(${S.present.size})와 달라요.`}
+  for(let s=1;s<=S.slots;s++){if(nIn(s)<2)return `${s}타임에 나오는 사람을 2명 이상 골라 주세요.`;const sum=sizeArr(s).reduce((a,b)=>a+b,0);if(sum!==nIn(s))return `${s}타임 조 인원 합(${sum})이 그 타임 나오는 사람 수(${nIn(s)})와 달라요.`}
   if(!activeProblems().length)return "'조원·질환' 탭에서 질환을 먼저 넣어 주세요.";return ""}
 function doGenerate(){const v=validate();if(v){toast(v);return}
   if(S.draft&&S.draft.length&&!confirm(`모든 타임(${S.slots}타임)을 새로 짤까요? 한 타임만 바꾸려면 오른쪽 '🎲 n타임만 다시'를, 더 하려면 '+ 타임 추가'를 쓰세요.`))return;
   for(let x=1;x<=S.slots;x++)fillSlotSet(x);
   S.draft=generate();S.vslot=1;S.dirty=true;renderToday();toast("짰어요 · 자동 저장돼요")}
 /* 자동 저장: 조 편성이 바뀌면 1.2초 뒤 저장 (문제가 있으면 이유를 보여 주고 기다림) */
-const autoSig=()=>JSON.stringify([S.date,S.draft,[...S.present].sort(),S.sizes,S.cfg,S.slots]);
+const autoSig=()=>JSON.stringify([S.date,S.draft,[...S.present].sort(),Object.entries(S.absent).map(([k,v])=>k+":"+[...v].sort()),S.sizes,S.cfg,S.slots]);
 function scheduleAuto(){clearTimeout(S.autoT);if(S.role==="member"||!S.draft||!S.draft.length||S.saving||!(S.dirty||!S.savedId))return;
   if(S.autoFail&&S.autoFail===autoSig())return;S.autoT=setTimeout(()=>saveDay(true),1200)}
 function saveCheck(){const v=validate();if(v)return v;
+  for(let s=1;s<=S.slots;s++)if(slotStale(s))return `${s}타임 나오는 사람이 바뀌었어요 · 위 조 나누기에서 '🎲 ${s}타임만 다시'를 눌러 주세요`;
   for(let s=1;s<=S.slots;s++){const rows=S.draft.filter(a=>a.slot===s);{const seen=new Set();for(const a of rows){const k=a.member_id+"|"+a.problem_id;if(seen.has(k))return `${s}타임에 ${(mem(a.member_id)||{}).name||"?"}이(가) ${pkw(prob(a.problem_id))}을(를) 두 번 풀어요 · 문제를 바꾸거나 세트에 문제를 더 넣어 주세요`;seen.add(k)}}const byM={};rows.forEach(a=>(byM[a.member_id]=byM[a.member_id]||new Set()).add(a.grp));if(Object.values(byM).some(x=>x.size>1))return `${s}타임에 한 사람이 두 조에 있어요`}
   return ""}
 async function saveDay(auto){clearTimeout(S.autoT);if(S.saving||!S.draft||!S.draft.length)return;const v=saveCheck();
