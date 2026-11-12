@@ -455,8 +455,6 @@ function limitCheck(team,d,room,ex,walk){const u=unitOf(team);
   if(!walk&&ex){const o=S.bookings.find(x=>x.id===ex);if(o&&(o.bonus||o.fixed))walk=true}   /* 관리자 추가·고정 신청은 상한 밖 */
   if(!walk&&unitUsed(u,d.date,ex)+chargeMin(d.start,d.end)>unitCap(u,d.date)+1e-9)return "DAILY_CAP";
   if(unitBookings(u,d.date,ex).filter(b=>overlap(b,d)).length>=(unitInfo(u).max_rooms||1))return "TEAM_BUSY";
-  /* 같은 방·같은 묶음 신청 사이 틈은 붙이거나 2시간 이상 */
-  if(unitBookings(u,d.date,ex).some(b=>b.room===room&&((b.end<d.start&&d.start-b.end<120)||(b.start>d.end&&b.start-d.end<120))))return "GAP_SHORT";
   if(unitRun(u,d,room,ex)>MAXLEN)return "RUN_LIMIT";
   return ""}
 const unitName=t=>{const u=unitOf(t),ts=Object.values(S.rules||{}).filter(r=>(r.unit||r.team)===u).map(r=>r.team).sort();return ts.length>1?ts.join("·")+"조 합산":t+"조"};
@@ -732,7 +730,7 @@ function renderNotices(){
   const last=lastBookable(),nx=nextOpen();
   let mine="";
   if(isLeader())mine=teamClosed(S.team)?`<br><b>우리 조는 지금 신청을 받지 않아요.</b> 필요하면 관리자에게 말해 주세요.`:offsetOf(S.team)<=EARLY?`<br>우리 조는 <b>다음 날 신청을 언제든</b> 할 수 있어요.`:`<br>우리 조는 <b>${openHM(S.team)}</b>에 열려요.`;
-  let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">다음 날 신청 오픈: <b>${openOrderText()}</b>.${closedLabel()?` ${closedLabel()}는 지금 신청을 받지 않아요.`:""} <b>같은 방은 연달아 3시간</b>까지, 같은 방을 다시 쓰려면 <b>2시간 이상 띄워</b> 주세요 (다른 방은 바로 가능).${isLeader()&&teamClosed(S.team)?"":` 지금은 <b>${md(last)}까지</b> 신청할 수 있고, <b>${whenText(nx.at)}</b>에 ${md(nx.date)}이 열려요.`}${mine}</div></div>`;
+  let h=`<div class="ntc rule"><span class="tag">예약 안내</span><div class="body">다음 날 신청 오픈: <b>${openOrderText()}</b>.${closedLabel()?` ${closedLabel()}는 지금 신청을 받지 않아요.`:""} <b>같은 방은 연달아 3시간</b>까지예요.${isLeader()&&teamClosed(S.team)?"":` 지금은 <b>${md(last)}까지</b> 신청할 수 있고, <b>${whenText(nx.at)}</b>에 ${md(nx.date)}이 열려요.`}${mine}</div></div>`;
   const ups=S.blocks.filter(k=>k.date>ymd()||(k.date===ymd()&&k.end>nowMin())).sort((a,b)=>a.date.localeCompare(b.date)||a.start-b.start).slice(0,4);
   if(ups.length)h=`<div class="ntc block"><span class="tag">사용 금지</span><div class="body">${ups.map(k=>`<b>${md(k.date)} ${fmt(k.start)}–${fmt(k.end)} · ${roomsLabel(k.rooms)}</b>${k.reason?" · "+esc(k.reason):""}`).join("<br>")}</div></div>`+h;
   if(S.notice.trim())h=`<div class="ntc admin"><span class="tag">공지</span><div class="body">${esc(S.notice.trim())}</div></div>`+h;
@@ -1183,7 +1181,7 @@ function drawForm(){
     :lim==="TEAM_BUSY"?`<div class="alert"><div><b>이 시간에 ${esc(unitName(S.team))}가 이미 방 ${uSame.length}개를 쓰고 있어요.</b> 동시에 ${uMax}개 방까지예요.<br>${uSame.map(b=>`${esc(b.team)}조 ${b.room}번 방 ${fmt(b.start)}–${fmt(b.end)}`).join("<br>")}</div></div>`
     :lim==="GAP_SHORT"?`<div class="alert"><div><b>${d.room}번 방 우리 조 신청과 틈이 2시간보다 짧아요.</b> 같은 방은 딱 붙이거나(합쳐서 3시간까지) 2시간 이상 띄워 주세요. 다른 방은 바로 써도 돼요.</div></div>`
     :lim==="RUN_LIMIT"?`<div class="alert"><div><b>${d.room}번 방을 연달아 3시간 넘게 쓰게 돼요.</b> 같은 방은 연속 3시간까지예요. 시간을 띄우거나 다른 방을 골라 주세요.</div></div>`
-    :isLeader()&&!lock?`<div class="hint">같은 방은 연달아 3시간까지, 다시 쓰려면 2시간 이상 띄워 주세요.</div>`:""}
+    :isLeader()&&!lock?`<div class="hint">같은 방은 연달아 3시간까지예요.</div>`:""}
   ${admOver?`<div class="hint ok">관리자 추가 신청은 보너스라 ${esc(unitName(d.team))} 하루 상한에 안 들어가요 (이 날 조장 신청 ${fmtH(uUsed)} / ${fmtCap(uCap)}).</div>`:""}
   <label class="field"><span>연습내용</span><input id="fContent" value="${esc(d.content)}" placeholder="A형 모의고사"></label>
   <div class="field"><span>쓸 재료 · 시간</span>
