@@ -134,6 +134,10 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .szwho span{margin-left:auto;font-size:.76rem;color:var(--accent-ink);font-weight:600;white-space:nowrap}
 .szchips .chip[aria-pressed="false"]{text-decoration:line-through;opacity:.6}
 .szstale{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.8rem;font-weight:600;color:var(--held);background:var(--held-soft);border-radius:8px;padding:6px 8px}
+.setmode{font-size:.8rem;color:var(--muted);background:var(--sunk);border-radius:8px;padding:6px 9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.setmode.man{color:var(--held);background:var(--held-soft);font-weight:600}
+.setmode .btn{margin-left:auto}
+.ovl{font-size:.76rem;font-weight:600;color:var(--held)}
 .szadd{border:1px dashed var(--line-strong);border-radius:10px;padding:0 12px;height:38px;font-size:.82rem;font-weight:600;color:var(--muted);background:none}
 .setrow{display:grid;grid-template-columns:2.2em minmax(0,1fr);gap:6px;align-items:center}
 .setrow b{font-family:var(--t-mono);font-size:.82rem;color:var(--muted);text-align:center}
@@ -427,10 +431,10 @@ body.member #probList input[readonly]{background:var(--sunk);color:var(--muted);
           </div>
         </section>
         <section class="card adm">
-          <div class="card-h"><h2>문제 세트</h2><button class="btn sm" type="button" id="setAuto">자동으로 고르기</button></div>
+          <div class="card-h"><h2>문제 세트</h2><button class="btn sm" type="button" id="setAuto">🔄 전부 자동으로</button></div>
           <div class="card-b">
             <div id="setRows" style="display:grid;gap:6px"></div>
-            <span class="hint">진행 순서와 문제 개수는 자유예요. 문제가 조 인원보다 적으면 같은 문제를 여러 명이 풀어요. 짠 뒤에도 사람·문제를 하나씩 바꿀 수 있어요.</span>
+            <span class="hint">기본은 자동이에요 — 🎲 짜기·타임만 다시를 누를 때마다 타임끼리 안 겹치게, 조원들이 덜 해 본 질환으로 새로 골라요. 문제를 직접 바꾼 타임은 그대로 고정돼요.</span>
           </div>
         </section>
         <button class="btn primary adm" type="button" id="genBtn" style="padding:11px">🎲 조 · 문제 짜기</button>
@@ -659,26 +663,38 @@ const maxSize=()=>{let m=0;for(let s=1;s<=S.slots;s++)m=Math.max(m,...slotSizes(
 const TYPES=()=>[...new Set(activeProblems().map(p=>p.type))];
 /* 타임마다 {rounds:[진행 순서 형들], set:[문제 id]} */
 /* 라운드(진행 순서 한 칸)마다 문제 목록 rsets[i] — 같은 형을 두 번 해도 따로. set = 모든 라운드 합친 것 */
-const cpCfg=c=>({rounds:c.rounds.slice(),rsets:(c.rsets||[]).map(x=>x.slice()),set:c.set.slice()});
+const cpCfg=c=>({rounds:c.rounds.slice(),rsets:(c.rsets||[]).map(x=>x.slice()),set:c.set.slice(),manual:!!c.manual});
 function normCfg(c){if(!Array.isArray(c.rsets)||c.rsets.length!==c.rounds.length){const used={};
     c.rsets=c.rounds.map((t,i)=>{const old=c.rsets&&c.rsets[i];if(old&&old.every(id=>(prob(id)||{}).type===t))return old.slice();const all=c.set.filter(id=>(prob(id)||{}).type===t);return all.slice()})}
   c.set=[];c.rsets.forEach(r=>r.forEach(id=>{if(!c.set.includes(id))c.set.push(id)}));return c}
-function cfgOf(s){S.cfg=S.cfg||{};if(!S.cfg[s]){const pv=S.cfg[s-1]||S.cfg[1];S.cfg[s]=pv?cpCfg(normCfg(pv)):{rounds:TYPES(),set:[]}}return normCfg(S.cfg[s])}
+function cfgOf(s){S.cfg=S.cfg||{};if(!S.cfg[s]){const pv=S.cfg[s-1]||S.cfg[1],r=pv?pv.rounds.slice():TYPES();S.cfg[s]={rounds:r,rsets:r.map(()=>[]),set:[]}}return normCfg(S.cfg[s])}
 const rsetOf=(s,i)=>(cfgOf(s).rsets[i]||[]).filter(id=>prob(id)&&prob(id).active);
 const setOf=(t,s=S.setSlot)=>cfgOf(s).set.filter(id=>(prob(id)||{}).type===t);
 const slotMax=s=>Math.max(0,...slotSizes(s));
 const unionSet=()=>{const o=[];for(let s=1;s<=S.slots;s++)cfgOf(s).set.forEach(id=>{if(!o.includes(id))o.push(id)});return o};
 const cfgForSave=n=>{const o={};for(let s=1;s<=n;s++)o[s]=cpCfg(cfgOf(s));return o};
-/* 진행 순서에 있는 형만, 형마다 (조 최대 인원 × 그 형 횟수)문제 — 모자라면 있는 만큼 */
-/* fresh(자동으로 고르기)일 때만 조 인원만큼 채움. 평소엔 조장이 고른 개수 그대로 — 비어 있는 형만 채움 */
-function fillSlotSet(s,fresh){const c=cfgOf(s),K=Math.max(3,slotMax(s));
-  /* 같은 형 라운드끼리는 되도록 다른 문제로 */
-  c.rounds.forEach((t,i)=>{if(!fresh&&c.rsets[i].some(id=>prob(id)&&prob(id).active))return;
-    const cnt=c.rounds.filter(x=>x===t).length,avail=activeProblems().filter(p=>p.type===t).length,k=Math.max(1,Math.min(K,Math.ceil(avail/cnt)));
-    const other=c.rsets.filter((_,j)=>j!==i&&c.rounds[j]===t&&(!fresh||j<i)).flat();
-    let pick=pickSet({[t]:k+other.length},other).filter(id=>(prob(id)||{}).type===t&&!other.includes(id)).slice(0,k);
-    if(pick.length<k)pick=pick.concat(pickSet({[t]:k},pick).filter(id=>(prob(id)||{}).type===t&&!pick.includes(id))).slice(0,k);if(!pick.length)pick=pickSet({[t]:k},[]).filter(id=>(prob(id)||{}).type===t).slice(0,k);c.rsets[i]=pick});
+/* ===== 문제 세트 자동 고르기 =====
+   라운드마다 k문제(= 그 타임 가장 큰 조 인원, 최소 3 · 질환 수가 모자라면 나눠서).
+   점수 낮은 순: ① 오늘 다른 타임/같은 타임 다른 라운드에 이미 있음(크게) ② 그 타임 나오는 사람들이 많이 풀어 봄·피드백 해 봄
+   ③ 전날 세트에 있었음 ④ 약간의 랜덤.  조장이 직접 고친 타임(manual)은 그대로 두고, 다른 타임이 그걸 피해서 고름. */
+function useToday(id,s,ri){let n=0;for(let x=1;x<=S.slots;x++){const c=S.cfg[x];if(!c||!c.rsets)continue;c.rsets.forEach((r,j)=>{if((x!==s||j!==ri)&&r.includes(id))n++})}return n}
+function probScore(id,s,ri,T,recent){const ms=presentIn(s);
+  return useToday(id,s,ri)*1000+ms.reduce((a,m)=>a+g2(T.solve,m,id)*2+g2(T.fb,m,id),0)+(recent.has(id)?ms.length*3:0)+Math.random()*1.5}
+function pickRound(s,ri,k,T,recent){const t=cfgOf(s).rounds[ri];
+  return activeProblems().filter(p=>p.type===t).map(p=>({id:p.id,v:probScore(p.id,s,ri,T,recent)})).sort((a,b)=>a.v-b.v).slice(0,k).map(x=>x.id)}
+function roundK(s,ri){const c=cfgOf(s),t=c.rounds[ri],K=Math.max(3,slotMax(s)),cnt=c.rounds.filter(x=>x===t).length,avail=activeProblems().filter(p=>p.type===t).length;
+  return Math.max(1,Math.min(K,Math.floor(avail/cnt)||1))}
+const pickCtx=()=>{const prev=S.D.days.filter(d=>d.date<S.date).slice(-1)[0];return {T:tally(d=>d.date!==S.date),recent:new Set(prev?prev.problem_set:[])}};
+/* 한 타임: fresh면 전부 새로(조장이 고친 타임은 빼고), 아니면 빈 라운드만 */
+function fillSlotSet(s,fresh){const c=cfgOf(s),{T,recent}=pickCtx();
+  if(fresh&&c.manual)fresh=false;
+  if(fresh)c.rsets=c.rounds.map(()=>[]);
+  c.rounds.forEach((t,i)=>{if(c.rsets[i].some(id=>prob(id)&&prob(id).active))return;c.rsets[i]=[];c.rsets[i]=pickRound(s,i,roundK(s,i),T,recent)});
   normCfg(c)}
+/* 모든 타임: 조장이 고친 타임은 그대로, 나머지는 비우고 1타임부터 차례로 — 앞 타임과 겹치지 않게 */
+function autoAllSets(force){for(let x=1;x<=S.slots;x++){const c=cfgOf(x);if(force)c.manual=false;if(!c.manual)c.rsets=c.rounds.map(()=>[])}
+  for(let x=1;x<=S.slots;x++)fillSlotSet(x)}
+const overlapOf=(id,s)=>{const o=[];for(let x=1;x<=S.slots;x++)if(x!==s&&S.cfg[x]&&(S.cfg[x].set||[]).includes(id))o.push(x);return o};
 function resetRound(s,i){cfgOf(s).rsets[i]=[];fillSlotSet(s)}
 const roundsOf=gr=>{const m=new Map();gr.slice().sort((a,b)=>a.ord-b.ord).forEach(a=>{const r=Math.floor((a.ord-1)/10);if(!m.has(r))m.set(r,[]);m.get(r).push(a)});
   return [...m.entries()].sort((a,b)=>a[0]-b[0]).map(([r,rows],i)=>({n:i+1,t:(prob(rows[0].problem_id)||{}).type||"?",rows}))};
@@ -790,14 +806,14 @@ function loadDate(date){
   if(date!==S.date){S.vslot=1;S.autoErr="";S.autoFail=""}S.date=date;S.open=null;const d=dayOf(date);
   S.setSlot=1;
   if(d){S.savedId=d.id;S.slots=d.slots;S.setIds=d.problem_set.slice();S.draft=d.assigns.map(a=>({...a}));S.dirty=false;
-    S.cfg={};const dc=d.cfg||{};for(let s=1;s<=d.slots;s++){if(dc[s]&&Array.isArray(dc[s].rounds))S.cfg[s]={rounds:dc[s].rounds.slice(),rsets:Array.isArray(dc[s].rsets)?dc[s].rsets.map(x=>x.slice()):deriveRsets(d,s,dc[s].rounds),set:(dc[s].set||d.problem_set).slice()};
+    S.cfg={};const dc=d.cfg||{};for(let s=1;s<=d.slots;s++){if(dc[s]&&Array.isArray(dc[s].rounds))S.cfg[s]={rounds:dc[s].rounds.slice(),rsets:Array.isArray(dc[s].rsets)?dc[s].rsets.map(x=>x.slice()):deriveRsets(d,s,dc[s].rounds),set:(dc[s].set||d.problem_set).slice(),manual:!!dc[s].manual};
       else{const g1=d.assigns.filter(a=>a.slot===s);const gs=[...new Set(g1.map(a=>a.grp))].sort((a,b)=>a-b);const r=roundsOf(g1.filter(a=>a.grp===gs[0])).map(R=>R.t);S.cfg[s]={rounds:r.length?r:TYPES(),rsets:r.length?deriveRsets(d,s,r):undefined,set:d.problem_set.slice()}}}
     S.present=new Set(d.assigns.map(a=>a.member_id));S.sizes={};S.absent={};S.szOpen={};
     for(let s=1;s<=d.slots;s++){const ids=new Set(d.assigns.filter(a=>a.slot===s).map(a=>a.member_id));S.absent[s]=new Set([...S.present].filter(id=>!ids.has(id)));if(S.absent[s].size)S.szOpen[s]=true}
     for(let s=1;s<=d.slots;s++){const rows=d.assigns.filter(a=>a.slot===s);const grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);S.sizes[s]=grps.map(g=>grpMembers(rows.filter(a=>a.grp===g)).length).join(",")}}
   else if(S.role==="member"){S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set();S.absent={};S.setIds=[];S.cfg={}}
   else{S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set(activeMembers().map(m=>m.id));S.absent={};S.szOpen={};S.slots=S.slots||2;S.sizes={};
-    const base=pickSet(Math.max(3,maxSize()));S.cfg={};for(let s=1;s<=S.slots;s++)S.cfg[s]={rounds:TYPES(),set:base.slice()}}
+    S.cfg={};for(let s=1;s<=S.slots;s++)S.cfg[s]={rounds:TYPES(),rsets:TYPES().map(()=>[]),set:[]};autoAllSets()}
   renderToday();loadBookings()}
 async function loadBookings(){const el=$("bkList");el.innerHTML="";const list=await api.bookings(S.date,S.D.teams||[]);
   if(S.date!==$("dateIn").value)return;
@@ -832,6 +848,8 @@ function renderSet(){
   const opts=(t,sel)=>`<option value="">— 고르기 —</option>`+ps.filter(p=>p.type===t).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(plabel(p))}</option>`).join("");
   let h="";
   if(S.slots>1)h+=`<div class="setslots stabs" role="tablist" aria-label="세트를 정할 타임">${Array.from({length:S.slots},(_,k)=>k+1).map(x=>`<button type="button" role="tab" data-ss="${x}" aria-selected="${x===ss}">${x}타임 <small class="st">${cfgOf(x).rounds.join("")}</small></button>`).join("")}</div>`;
+  h+=c.manual?`<div class="setmode man">✋ 직접 고친 세트 · 다시 짜도 이 문제 그대로 <button type="button" class="btn sm" data-unman>자동으로 되돌리기</button></div>`
+    :`<div class="setmode">🔄 자동 · 짤 때마다 ${S.slots>1?"다른 타임과 안 겹치게, ":""}덜 해 본 질환으로 새로 골라요 (고치면 그대로 고정)</div>`;
   h+=`<div class="rounds"><span class="rl">진행 순서</span>${c.rounds.map((t,k)=>`<span class="rchip" style="${tStyle(t)}"><b>${k+1}</b><select data-rt="${k}" aria-label="${k+1}번째 형">${allT.map(x=>`<option ${x===t?"selected":""}>${x}</option>`).join("")}</select>${c.rounds.length>1?`<button type="button" class="x" data-rx="${k}" aria-label="${k+1}번째 빼기">✕</button>`:""}</span>`).join(`<span class="rarr">→</span>`)}
     ${c.rounds.length<6?`<button type="button" class="btn sm ghost" data-radd>+ 추가</button>`:""}
     <span class="rpre">${[allT.join(""),"BBC","AAC","ABB"].filter(v=>v.split("").every(x=>allT.includes(x))).filter((v,k,a)=>a.indexOf(v)===k).map(v=>`<button type="button" class="pre" data-rpre="${v}">${v.split("").join("·")}</button>`).join("")}</span>
@@ -840,21 +858,23 @@ function renderSet(){
     return `<div class="tsec" style="${tStyle(t)}"><div style="display:flex;align-items:center;gap:6px"><h3 style="margin-right:auto"><span class="rno">${ri+1}</span> ${t}형${dup?` <small class="rnth">(${c.rounds.slice(0,ri+1).filter(x=>x===t).length}번째)</small>`:""} <span class="hint" style="font-weight:500">${ids.length}문제</span></h3>
       <button class="btn sm ghost" type="button" data-tdel="${ri}" aria-label="${ri+1}번 하나 빼기">−</button><button class="btn sm" type="button" data-tadd="${ri}" aria-label="${ri+1}번 하나 추가">+</button></div>
       ${ids.map((id,k)=>`<select data-si="${ri}:${k}" aria-label="${ri+1}번 ${t}형 문제">${opts(t,id)}</select>`).join("")}
-      ${ids.length&&ids.length<need?`<div class="hint">${need}명 조는 같은 문제를 여러 명이 풀어요 (그대로 써도 돼요)</div>`:""}</div>`}).join("")
+      ${ids.length&&ids.length<need?`<div class="hint">${need}명 조는 같은 문제를 여러 명이 풀어요 (그대로 써도 돼요)</div>`:""}
+      ${(()=>{const ov=ids.filter(id=>overlapOf(id,ss).length);return ov.length?`<div class="ovl">⚠ 다른 타임과 겹침: ${ov.map(id=>`${esc(pcode(prob(id)))}(${overlapOf(id,ss).join("·")}타임)`).join(", ")}</div>`:""})()}</div>`}).join("")
     :`<div class="empty">'조원·질환' 탭에서 질환을 먼저 넣어 주세요.</div>`;
   const el=$("setRows");el.innerHTML=h;
   const chg=()=>{markDirty();renderSet()};
+  const um=el.querySelector("[data-unman]");if(um)um.onclick=()=>{c.manual=false;fillSlotSet(ss,true);toast(`${ss}타임 문제를 자동으로 다시 골랐어요`);chg()};
   el.querySelectorAll("[data-ss]").forEach(b=>b.onclick=()=>{S.setSlot=Number(b.dataset.ss);renderSet()});
   el.querySelectorAll("[data-rt]").forEach(x=>x.onchange=()=>{const i=Number(x.dataset.rt);c.rounds[i]=x.value;c.rsets[i]=[];fillSlotSet(ss);chg()});
   el.querySelectorAll("[data-rx]").forEach(b=>b.onclick=()=>{const i=Number(b.dataset.rx);c.rounds.splice(i,1);c.rsets.splice(i,1);normCfg(c);chg()});
   const ra=el.querySelector("[data-radd]");if(ra)ra.onclick=()=>{c.rounds.push(c.rounds[c.rounds.length-1]||allT[0]);c.rsets.push([]);fillSlotSet(ss);chg()};
   el.querySelectorAll("[data-rpre]").forEach(b=>b.onclick=()=>{c.rounds=b.dataset.rpre.split("");c.rsets=c.rounds.map(()=>[]);fillSlotSet(ss);chg()});
-  const rc=el.querySelector("[data-rcopy]");if(rc)rc.onclick=()=>{for(let x=1;x<=S.slots;x++)if(x!==ss)S.cfg[x]=cpCfg(c);toast(`모든 타임을 ${c.rounds.join("→")} · 같은 세트로 맞췄어요`);chg()};
-  el.querySelectorAll("[data-si]").forEach(x=>x.onchange=()=>{const [ri,k]=x.dataset.si.split(":").map(Number);c.rsets[ri][k]=x.value;c.rsets[ri]=c.rsets[ri].filter(Boolean);normCfg(c);chg()});
+  const rc=el.querySelector("[data-rcopy]");if(rc)rc.onclick=()=>{for(let x=1;x<=S.slots;x++)if(x!==ss){S.cfg[x]={rounds:c.rounds.slice(),rsets:c.rounds.map(()=>[]),set:[]}}for(let x=1;x<=S.slots;x++)if(x!==ss)fillSlotSet(x);toast(`모든 타임을 ${c.rounds.join("→")} 순서로 · 문제는 타임마다 겹치지 않게 골랐어요`);chg()};
+  el.querySelectorAll("[data-si]").forEach(x=>x.onchange=()=>{const [ri,k]=x.dataset.si.split(":").map(Number);c.rsets[ri][k]=x.value;c.rsets[ri]=c.rsets[ri].filter(Boolean);c.manual=true;normCfg(c);chg()});
   el.querySelectorAll("[data-tadd]").forEach(b=>b.onclick=()=>{const ri=Number(b.dataset.tadd),t=c.rounds[ri],cur=c.rsets[ri];const other=c.rsets.filter((_,j)=>j!==ri&&c.rounds[j]===t).flat();
-    const cand=pickSet({[t]:cur.length+other.length+1},[...cur,...other]).find(id=>(prob(id)||{}).type===t&&!cur.includes(id)&&!other.includes(id))||activeProblems().find(p=>p.type===t&&!cur.includes(p.id))?.id;
-    if(!cand){toast(`더 넣을 ${t}형 질환이 없어요`);return}cur.push(cand);normCfg(c);chg()});
-  el.querySelectorAll("[data-tdel]").forEach(b=>b.onclick=()=>{const ri=Number(b.dataset.tdel);if(!c.rsets[ri].length)return;c.rsets[ri].pop();normCfg(c);chg()});
+    const {T,recent}=pickCtx(),cand=pickRound(ss,ri,99,T,recent).find(id=>!cur.includes(id)&&!other.includes(id))||activeProblems().find(p=>p.type===t&&!cur.includes(p.id))?.id;
+    if(!cand){toast(`더 넣을 ${t}형 질환이 없어요`);return}cur.push(cand);c.manual=true;normCfg(c);chg()});
+  el.querySelectorAll("[data-tdel]").forEach(b=>b.onclick=()=>{const ri=Number(b.dataset.tdel);if(!c.rsets[ri].length)return;c.rsets[ri].pop();c.manual=true;normCfg(c);chg()});
   $("genBtn").textContent=S.draft?"🎲 다시 짜기":"🎲 조 · 문제 짜기"}
 /* 형 하나에 질환 하나 더(덜 해 본 순) */
 function markDirty(){if(S.draft)S.dirty=true;renderStatus()}
@@ -929,10 +949,10 @@ function addSlot(){if(S.present.size<2){toast("나오는 사람을 2명 이상 �
   const n=Math.max(0,...(S.draft||[]).map(a=>a.slot))+1;if(n>6){toast("타임은 6개까지예요");return}
   for(const id of S.draft.map(a=>a.member_id))if(!S.present.has(id)){toast("나오는 사람 목록이 바뀌었어요 · 전체 다시 짜기를 써 주세요");return}
   S.slots=n;S.sizes[n]=S.sizes[n]??autoSizes(nIn(n)).join(",");
-  cfgOf(n);fillSlotSet(n);S.draft=generate(n);S.setSlot=n;S.vslot=n;S.dirty=true;renderToday();toast(`${n}타임을 짰어요 (앞 타임은 그대로) · 자동 저장돼요`)}
+  cfgOf(n);fillSlotSet(n,true);S.draft=generate(n);S.setSlot=n;S.vslot=n;S.dirty=true;renderToday();toast(`${n}타임을 짰어요 (앞 타임은 그대로) · 자동 저장돼요`)}
 function reSlot(v){if(nIn(v)<2){toast(`${v}타임에 나오는 사람을 2명 이상 골라 주세요.`);return}const sum=sizeArr(v).reduce((a,b)=>a+b,0);if(sum!==nIn(v)){toast(`${v}타임 조 인원 합(${sum})이 그 타임 나오는 사람 수(${nIn(v)})와 달라요.`);return}
   if(S.savedId&&!confirm(`${v}타임만 새로 짤까요? (다른 타임은 그대로)`))return;
-  fillSlotSet(v);S.draft=generate(v);S.vslot=v;S.dirty=true;renderToday();toast(`${v}타임만 다시 짰어요 · 자동 저장돼요`)}
+  fillSlotSet(v,true);S.draft=generate(v);S.vslot=v;S.dirty=true;renderToday();toast(`${v}타임만 다시 짰어요 · 자동 저장돼요`)}
 {let sx=0,sy=0;const r=document.getElementById("result");if(r){r.addEventListener("touchstart",e=>{const t=e.touches[0];sx=t.clientX;sy=t.clientY},{passive:true});
   r.addEventListener("touchend",e=>{if(e.target.closest("select,textarea,input"))return;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)<70||Math.abs(dy)>Math.abs(dx)*.6)return;
     const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort((a,b)=>a-b),ix=slots.indexOf(S.vslot),nx=slots[ix+(dx<0?1:-1)];if(nx){S.vslot=nx;S.fbOpen=null;renderResult()}},{passive:true})}}
@@ -943,7 +963,7 @@ function validate(){if(S.present.size<2)return "나오는 사람을 2명 이상 
   if(!activeProblems().length)return "'조원·질환' 탭에서 질환을 먼저 넣어 주세요.";return ""}
 function doGenerate(){const v=validate();if(v){toast(v);return}
   if(S.draft&&S.draft.length&&!confirm(`모든 타임(${S.slots}타임)을 새로 짤까요? 한 타임만 바꾸려면 오른쪽 '🎲 n타임만 다시'를, 더 하려면 '+ 타임 추가'를 쓰세요.`))return;
-  for(let x=1;x<=S.slots;x++)fillSlotSet(x);
+  autoAllSets();
   S.draft=generate();S.vslot=1;S.dirty=true;renderToday();toast("짰어요 · 자동 저장돼요")}
 /* 자동 저장: 조 편성이 바뀌면 1.2초 뒤 저장 (문제가 있으면 이유를 보여 주고 기다림) */
 const autoSig=()=>JSON.stringify([S.date,S.draft,[...S.present].sort(),Object.entries(S.absent).map(([k,v])=>k+":"+[...v].sort()),S.sizes,S.cfg,S.slots]);
@@ -1141,7 +1161,7 @@ function setTab(t){if(t==="plan"&&S.role==="member")t="today";
 $("toView").onclick=()=>setTab("today");
 document.querySelectorAll(".ptabs [data-tab]").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 $("dateIn").onchange=()=>{if(!$("dateIn").value)return;if(!confirmLeave()){$("dateIn").value=S.date;return}loadDate($("dateIn").value)};
-$("setAuto").onclick=()=>{fillSlotSet(S.setSlot||1,true);markDirty();renderSet()};
+$("setAuto").onclick=()=>{autoAllSets(true);markDirty();renderSet();toast(S.slots>1?"모든 타임 문제를 새로 골랐어요 · 타임끼리 겹치지 않게":"문제를 새로 골랐어요")};
 $("genBtn").onclick=doGenerate;
 function normD(){S.D.days.forEach(d=>{d.assigns=d.assigns||[];d.skipped=d.skipped||[]});S.D.logs=S.D.logs||[];S.D.fbs=S.D.fbs||[];renderMe()}
 async function reload(){S.D=await api.load();normD()}
