@@ -138,6 +138,18 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .setmode.man{color:var(--held);background:var(--held-soft);font-weight:600}
 .setmode .btn{margin-left:auto}
 .ovl{font-size:.76rem;font-weight:600;color:var(--held)}
+.ssum{display:grid;grid-template-columns:auto auto 1fr;gap:4px 8px;align-items:center;font-size:.84rem;padding:6px 0;border-bottom:1px solid var(--line)}
+.ssum .sst{font-size:.72rem;font-weight:700;color:var(--muted);background:var(--sunk);border-radius:6px;padding:1px 6px;justify-self:start}
+.ssum .sst.man{color:var(--held);background:var(--held-soft)}
+.ssum .sov{font-size:.72rem;font-weight:700;color:var(--held);justify-self:end}
+.ssum .srs{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 10px;font-family:var(--t-mono);font-size:.8rem}
+.ssum .srs span{color:var(--ti,var(--fg))}
+.ssum .srs i{font-style:normal;font-weight:800;margin-right:4px}
+.shr{position:relative;display:inline-block}
+.shrm{position:absolute;right:0;top:calc(100% + 4px);z-index:20;background:var(--surface);border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.12);display:grid;min-width:140px;overflow:hidden}
+.shrm[hidden]{display:none}
+.shrm button{text-align:left;padding:10px 12px;font-size:.86rem;font-weight:600}
+.shrm button+button{border-top:1px solid var(--line)}
 .szadd{border:1px dashed var(--line-strong);border-radius:10px;padding:0 12px;height:38px;font-size:.82rem;font-weight:600;color:var(--muted);background:none}
 .setrow{display:grid;grid-template-columns:2.2em minmax(0,1fr);gap:6px;align-items:center}
 .setrow b{font-family:var(--t-mono);font-size:.82rem;color:var(--muted);text-align:center}
@@ -427,14 +439,14 @@ body.member #probList input[readonly]{background:var(--sunk);color:var(--muted);
             <div class="field adm"><span>오늘 나오는 사람 <em id="presentN" style="font-style:normal"></em></span><div class="chips" id="presentChips"></div></div>
             <div class="field adm"><span>타임 수</span><div class="seg3" id="slotSeg"></div></div>
             <div class="field adm"><span>조 나누기 (타임마다 조별 인원)</span><div class="sizes" id="sizes"></div>
-              <span class="hint">👥 눌러서 그 타임만 빠지는 사람 빼기 · −/+로 조별 인원 조정 · 조 안에서는 1인 1문제씩 풀고, 나머지 사람이 피드백해요.</span></div>
+              <span class="hint">👥 그 타임만 빠지는 사람 · −/+ 조별 인원</span></div>
           </div>
         </section>
         <section class="card adm">
           <div class="card-h"><h2>문제 세트</h2><button class="btn sm" type="button" id="setAuto">🔄 전부 자동으로</button></div>
           <div class="card-b">
             <div id="setRows" style="display:grid;gap:6px"></div>
-            <span class="hint">기본은 자동이에요 — 🎲 짜기·타임만 다시를 누를 때마다 타임끼리 안 겹치게, 조원들이 덜 해 본 질환으로 새로 골라요. 문제를 직접 바꾼 타임은 그대로 고정돼요.</span>
+            <span class="hint">짤 때마다 타임끼리 안 겹치게, 덜 해 본 질환으로 자동으로 골라요. 직접 고친 타임은 고정.</span>
           </div>
         </section>
         <button class="btn primary adm" type="button" id="genBtn" style="padding:11px">🎲 조 · 문제 짜기</button>
@@ -640,8 +652,8 @@ function slotStale(s){if(!S.draft||!S.draft.some(a=>a.slot===s))return false;con
 function renderSizes(){let h="";const nm=id=>esc((mem(id)||{}).name||"?");
   for(let s=1;s<=S.slots;s++){const n=nIn(s),a=sizeArr(s),sum=a.reduce((x,y)=>x+y,0),out=[...S.present].filter(id=>absOf(s).has(id)),op=!!S.szOpen[s];
     h+=`<div class="szrow${sum!==n?" bad":""}" data-row="${s}"><div class="szhead"><span>${s}타임</span>`+
-      (s>1?`<button class="btn sm ghost" type="button" data-cp="${s}">↑ 위와 같게</button>`:"")+
-      `<button class="btn sm ghost" type="button" data-au="${s}">균등</button><span class="st">${sizeState(sum,s)}</span></div>`+
+      (S.sizes[s]!=null&&a.slice().sort((x,y)=>y-x).join()!==autoSizes(n).join()?`<button class="btn sm ghost" type="button" data-au="${s}">↺ 기본</button>`:"")+
+      `<span class="st">${sizeState(sum,s)}</span></div>`+
       `<button type="button" class="szwho${out.length?" has":""}" data-who="${s}" aria-expanded="${op}">👥 ${n}명${out.length?` · <b>${out.map(nm).join("·")} 빠짐</b>`:" 다 나옴"}<span>${op?"닫기 ▴":"빠지는 사람 ▾"}</span></button>`+
       (op?`<div class="chips szchips">${[...S.present].sort((x,y)=>S.D.members.findIndex(m=>m.id===x)-S.D.members.findIndex(m=>m.id===y)).map(id=>`<button type="button" class="chip sm" data-ab="${s}|${id}" aria-pressed="${!absOf(s).has(id)}">${nm(id)}</button>`).join("")}</div>`:"")+
       (slotStale(s)?`<div class="szstale">조 편성과 나오는 사람이 달라요 <button class="btn sm primary" type="button" data-rs="${s}">🎲 ${s}타임만 다시</button></div>`:"")+
@@ -654,10 +666,8 @@ function renderSizes(){let h="";const nm=id=>esc((mem(id)||{}).name||"?");
   $("sizes").querySelectorAll("[data-ab]").forEach(b=>b.onclick=()=>{const [s,id]=b.dataset.ab.split("|"),A=absOf(s);A.has(id)?A.delete(id):A.add(id);delete S.sizes[s];markDirty();renderSizes();renderSet()});
   $("sizes").querySelectorAll("[data-rs]").forEach(b=>b.onclick=()=>reSlot(Number(b.dataset.rs)));
   $("sizes").querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{const s=b.dataset.s,a=sizeArr(s);a[+b.dataset.g]+=+b.dataset.d;set(s,a)});
-  $("sizes").querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{const s=b.dataset.add,a=sizeArr(s),left=n-a.reduce((x,y)=>x+y,0);a.push(left>0?Math.min(left,4):1);set(s,a)});
-  $("sizes").querySelectorAll("[data-au]").forEach(b=>b.onclick=()=>{const s=b.dataset.au,g=sizeArr(s).length||1;
-    const a=g>n?autoSizes(n):Array.from({length:g},(_,i)=>Math.floor(n/g)+(i<n%g?1:0));set(s,a)});
-  $("sizes").querySelectorAll("[data-cp]").forEach(b=>b.onclick=()=>{const s=+b.dataset.cp;set(s,sizeArr(s-1))})}
+  $("sizes").querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{const s=b.dataset.add,a=sizeArr(s),left=nIn(s)-a.reduce((x,y)=>x+y,0);a.push(left>0?Math.min(left,4):1);set(s,a)});
+  $("sizes").querySelectorAll("[data-au]").forEach(b=>b.onclick=()=>{delete S.sizes[b.dataset.au];markDirty();renderSizes();renderSet()})}
 function slotSizes(s){const v=parseSizes(S.sizes[s]);return v.length?v.sort((a,b)=>b-a):autoSizes(nIn(s))}
 const maxSize=()=>{let m=0;for(let s=1;s<=S.slots;s++)m=Math.max(m,...slotSizes(s),0);return m};
 const TYPES=()=>[...new Set(activeProblems().map(p=>p.type))];
@@ -836,9 +846,8 @@ function renderToday(){
   $("presentChips").innerHTML=ms.length?ms.map(m=>`<button type="button" class="chip" data-m="${m.id}" aria-pressed="${S.present.has(m.id)}">${esc(m.name)}</button>`).join(""):`<span class="hint">'조원·질환' 탭에서 조원 이름을 먼저 넣어 주세요.</span>`;
   $("presentChips").querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{const id=b.dataset.m;S.present.has(id)?S.present.delete(id):S.present.add(id);S.sizes={};S.draft=S.savedId?S.draft:null;markDirty();renderToday()});
   $("presentN").textContent=`· ${S.present.size}명`;
-  $("slotSeg").parentElement.hidden=!!(S.draft&&S.draft.length);
   $("slotSeg").innerHTML=[1,2,3,4].map(n=>`<button type="button" data-n="${n}" aria-pressed="${S.slots===n}">${n}타임</button>`).join("");
-  $("slotSeg").querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>{S.slots=Number(b.dataset.n);markDirty();renderToday()});
+  $("slotSeg").querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>setSlots(Number(b.dataset.n)));
   renderSizes();
   renderSet();renderResult();
   $("dayH").textContent=S.edit?"날짜 · 인원":"날짜";$("dayMeta").textContent=S.role==="member"||!S.edit?"":S.savedId?"저장된 날":"새로 짜기"}
@@ -848,10 +857,17 @@ function renderSet(){
   const opts=(t,sel)=>`<option value="">— 고르기 —</option>`+ps.filter(p=>p.type===t).map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(plabel(p))}</option>`).join("");
   let h="";
   if(S.slots>1)h+=`<div class="setslots stabs" role="tablist" aria-label="세트를 정할 타임">${Array.from({length:S.slots},(_,k)=>k+1).map(x=>`<button type="button" role="tab" data-ss="${x}" aria-selected="${x===ss}">${x}타임 <small class="st">${cfgOf(x).rounds.join("")}</small></button>`).join("")}</div>`;
+  $("setAuto").hidden=!Array.from({length:S.slots},(_,k)=>cfgOf(k+1).manual).some(Boolean);
+  if(!S.setOpen){const sum=Array.from({length:S.slots},(_,k)=>k+1).map(x=>{const cx=cfgOf(x),ov=cx.set.filter(id=>overlapOf(id,x).length).length;
+      return `<div class="ssum">${S.slots>1?`<b>${x}타임</b>`:""}<span class="sst ${cx.manual?"man":""}">${cx.manual?"✋ 직접":"자동"}</span>${ov?`<span class="sov">겹침 ${ov}</span>`:""}
+        <div class="srs">${cx.rounds.map((t,ri)=>`<span style="${tStyle(t)}"><i>${t}</i>${(cx.rsets[ri]||[]).map(id=>esc(pcode(prob(id)))).join(" ")||"—"}</span>`).join("")}</div></div>`}).join("");
+    $("setRows").innerHTML=sum+`<button type="button" class="btn sm" data-sopen>✏️ 순서·문제 고치기</button>`;
+    $("setRows").querySelector("[data-sopen]").onclick=()=>{S.setOpen=true;renderSet()};
+    $("genBtn").textContent=S.draft?"🎲 다시 짜기":"🎲 조 · 문제 짜기";return}
   h+=c.manual?`<div class="setmode man">✋ 직접 고친 세트 · 다시 짜도 이 문제 그대로 <button type="button" class="btn sm" data-unman>자동으로 되돌리기</button></div>`
-    :`<div class="setmode">🔄 자동 · 짤 때마다 ${S.slots>1?"다른 타임과 안 겹치게, ":""}덜 해 본 질환으로 새로 골라요 (고치면 그대로 고정)</div>`;
-  h+=`<div class="rounds"><span class="rl">진행 순서</span>${c.rounds.map((t,k)=>`<span class="rchip" style="${tStyle(t)}"><b>${k+1}</b><select data-rt="${k}" aria-label="${k+1}번째 형">${allT.map(x=>`<option ${x===t?"selected":""}>${x}</option>`).join("")}</select>${c.rounds.length>1?`<button type="button" class="x" data-rx="${k}" aria-label="${k+1}번째 빼기">✕</button>`:""}</span>`).join(`<span class="rarr">→</span>`)}
-    ${c.rounds.length<6?`<button type="button" class="btn sm ghost" data-radd>+ 추가</button>`:""}
+    :"";
+  h+=`<div class="rounds"><span class="rl">진행 순서</span>${c.rounds.map((t,k)=>`<span class="rchip" style="${tStyle(t)}"><b>${k+1}</b><select data-rt="${k}" aria-label="${k+1}번째 형">${allT.map(x=>`<option ${x===t?"selected":""}>${x}</option>`).join("")}</select></span>`).join(`<span class="rarr">→</span>`)}
+    ${c.rounds.length>1?`<button type="button" class="btn sm ghost" data-rx="${c.rounds.length-1}" aria-label="마지막 빼기">−</button>`:""}${c.rounds.length<6?`<button type="button" class="btn sm ghost" data-radd aria-label="하나 더">+</button>`:""}
     <span class="rpre">${[allT.join(""),"BBC","AAC","ABB"].filter(v=>v.split("").every(x=>allT.includes(x))).filter((v,k,a)=>a.indexOf(v)===k).map(v=>`<button type="button" class="pre" data-rpre="${v}">${v.split("").join("·")}</button>`).join("")}</span>
     ${S.slots>1?`<button type="button" class="linkbtn" data-rcopy>다른 타임도 이렇게</button>`:""}</div>`;
   h+=ps.length?c.rounds.map((t,ri)=>{const ids=c.rsets[ri]||[],dup=c.rounds.filter(x=>x===t).length>1;
@@ -861,7 +877,8 @@ function renderSet(){
       ${ids.length&&ids.length<need?`<div class="hint">${need}명 조는 같은 문제를 여러 명이 풀어요 (그대로 써도 돼요)</div>`:""}
       ${(()=>{const ov=ids.filter(id=>overlapOf(id,ss).length);return ov.length?`<div class="ovl">⚠ 다른 타임과 겹침: ${ov.map(id=>`${esc(pcode(prob(id)))}(${overlapOf(id,ss).join("·")}타임)`).join(", ")}</div>`:""})()}</div>`}).join("")
     :`<div class="empty">'조원·질환' 탭에서 질환을 먼저 넣어 주세요.</div>`;
-  const el=$("setRows");el.innerHTML=h;
+  h+=`<button type="button" class="btn sm" data-sclose>✓ 다 고침</button>`;
+  const el=$("setRows");el.innerHTML=h;el.querySelector("[data-sclose]").onclick=()=>{S.setOpen=false;renderSet()};
   const chg=()=>{markDirty();renderSet()};
   const um=el.querySelector("[data-unman]");if(um)um.onclick=()=>{c.manual=false;fillSlotSet(ss,true);toast(`${ss}타임 문제를 자동으로 다시 골랐어요`);chg()};
   el.querySelectorAll("[data-ss]").forEach(b=>b.onclick=()=>{S.setSlot=Number(b.dataset.ss);renderSet()});
@@ -879,20 +896,23 @@ function renderSet(){
 /* 형 하나에 질환 하나 더(덜 해 본 순) */
 function markDirty(){if(S.draft)S.dirty=true;renderStatus()}
 function renderStatus(){const multi=S.draft&&new Set(S.draft.map(a=>a.slot)).size>1,sl=multi?`${S.vslot||1}타임 `:"";
-  const share=S.draft&&S.draft.length?`<button class="btn sm" type="button" id="copyDay" title="지금 보고 있는 타임만 복사">${sl}텍스트</button><button class="btn sm" type="button" id="imgDay" title="지금 보고 있는 타임만 저장">${sl}이미지</button>`:"";
+  const share=S.draft&&S.draft.length?`<span class="shr"><button class="btn sm" type="button" id="shareBtn" aria-expanded="false">📤 ${sl}공유</button><span class="shrm" hidden><button type="button" id="copyDay">📋 텍스트 복사</button><button type="button" id="imgDay">🖼 이미지 저장</button></span></span>`:"";
   if(S.role==="member")$("resStatus").innerHTML=share;
   else if(!S.edit){$("resStatus").innerHTML=(S.dirty&&S.draft?`<span class="tag draft">저장 중…</span>`:"")+share+(S.draft&&S.draft.length?`<button class="btn sm ghost" type="button" id="goPlan2">✏️ 고치기</button>`:"");const g=$("goPlan2");if(g)g.onclick=()=>setTab("plan")}
-  else $("resStatus").innerHTML=!S.draft?"":(S.saving?`<span class="tag draft">저장 중…</span>`:S.dirty||!S.savedId?`<span class="tag draft" ${S.autoErr?`title="${esc(S.autoErr)}"`:""}>${S.autoErr?"자동 저장 안 됨":"곧 자동 저장"}</span><button class="btn sm primary" type="button" id="saveDay">저장</button>`:`<span class="tag saved">✓ 저장됨</span>`)+share;
+  else $("resStatus").innerHTML=!S.draft?"":(S.saving?`<span class="tag draft">저장 중…</span>`:S.dirty||!S.savedId?(S.autoErr?`<span class="tag draft">자동 저장 안 됨</span><button class="btn sm primary" type="button" id="saveDay">저장</button>`:`<span class="tag draft">곧 자동 저장</span>`):`<span class="tag saved">✓ 저장됨</span>`);
   if(S.autoErr&&(S.dirty||!S.savedId)&&S.role!=="member"&&S.edit)$("resStatus").insertAdjacentHTML("afterbegin",`<span class="autoerr">${esc(S.autoErr)}</span>`);
   scheduleAuto();
-  const sv=$("saveDay");if(sv)sv.onclick=saveDay;const cp=$("copyDay");if(cp)cp.onclick=copyDay;const im=$("imgDay");if(im)im.onclick=shareImage}
+  const sv=$("saveDay");if(sv)sv.onclick=saveDay;const cp=$("copyDay");if(cp)cp.onclick=()=>{closeShr();copyDay()};const im=$("imgDay");if(im)im.onclick=()=>{closeShr();shareImage()};
+  const sb=$("shareBtn");if(sb)sb.onclick=e=>{e.stopPropagation();const m=sb.nextElementSibling,o=m.hidden;m.hidden=!o;sb.setAttribute("aria-expanded",o)}}
+function closeShr(){document.querySelectorAll(".shrm").forEach(m=>m.hidden=true)}
+document.addEventListener("click",e=>{if(!e.target.closest(".shr"))closeShr()});
 function nGroupsMax(){if(S.draft&&S.draft.length){const c={};S.draft.forEach(a=>{(c[a.slot]=c[a.slot]||new Set()).add(a.grp)});return Math.max(0,...Object.values(c).map(x=>x.size))}
   let m=0;for(let s=1;s<=(S.slots||1);s++)m=Math.max(m,sizeArr(s).length);return m}
 function renderResult(){
   $("tab-today").classList.toggle("wide",nGroupsMax()>=3);
   $("resTitle").textContent=`${md(S.date)} 조 편성`;renderStatus();
   const el=$("result");if(!S.draft||!S.draft.length){el.innerHTML=`<div class="empty">${S.role==="member"?"아직 이 날 조가 안 짜였어요. 위 날짜 버튼(●)에서 저장된 날을 골라 보세요.":S.edit?"사람·타임·문제 세트를 정하고 '🎲 조 · 문제 짜기'를 눌러 주세요.":`아직 이 날 조가 안 짜였어요.<br><button class="btn primary sm" type="button" id="goPlan">✏️ 이 날 연습 짜기</button>`}</div>`;const gp=$("goPlan");if(gp)gp.onclick=()=>setTab("plan");return}
-  const RO=S.role==="member"||!S.edit;
+  const RO=S.role==="member"||!S.edit,FX=!RO&&!!S.fix;
   const saved=S.savedId&&!S.dirty;const day=dayOf(S.date);
   const present=[...S.present].map(mem).filter(Boolean);
   const pOpts=(t,sel,sl)=>{const ids=[...new Set([...setOf(t,sl),sel])],o=p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(plabel(p))}</option>`;const rest=activeProblems().filter(p=>!ids.includes(p.id)).sort((a,b)=>(a.type===t?0:1)-(b.type===t?0:1));
@@ -901,41 +921,39 @@ function renderResult(){
   let h="";const slots=[...new Set(S.draft.map(a=>a.slot))].sort((a,b)=>a-b);
   if(!slots.includes(S.vslot))S.vslot=slots[0];
   if(slots.length>1||!RO){const ix=slots.indexOf(S.vslot);
-    h+=`<div class="spager"><button type="button" class="pg" data-vs="${slots[ix-1]||""}" ${ix>0?"":"disabled"} aria-label="이전 타임">‹</button>
+    h+=`<div class="spager">
       <div class="stabs" role="tablist">${slots.map(x=>`<button type="button" role="tab" data-vs="${x}" aria-selected="${x===S.vslot}">${x}타임${slotTime(x)?`<small class="st">${slotTime(x)}</small>`:""}${S.date===ymd()&&nowSlot()===x&&(S.blocks||[]).length?`<i class="nowdot" title="지금"></i>`:""}${saved&&day&&(day.skipped||[]).includes(x)?" ·안 함":""}</button>`).join("")}</div>
-      <button type="button" class="pg" data-vs="${slots[ix+1]||""}" ${ix<slots.length-1?"":"disabled"} aria-label="다음 타임">›</button>
-      ${RO?"":`<span class="spacer"></span><button class="btn sm" type="button" id="reSlot">🎲 ${S.vslot}타임만 다시</button>${slots.length>1&&S.vslot===slots[slots.length-1]?`<button class="btn sm ghost" type="button" id="delSlot">${S.vslot}타임 빼기</button>`:""}<button class="btn sm primary" type="button" id="addSlot">+ 타임 추가</button>`}</div>`}
+      ${RO?"":`<span class="spacer"></span><button class="btn sm" type="button" id="reSlot">🎲 ${S.vslot}타임만 다시</button><button class="btn sm ${FX?"primary":""}" type="button" id="fixBtn" aria-pressed="${FX}">${FX?"✓ 다 고침":"✏️ 손보기"}</button>`}</div>`}
   for(const s of slots.filter(x=>x===S.vslot)){const skip=saved&&day&&(day.skipped||[]).includes(s);
     const rows=S.draft.filter(a=>a.slot===s);let grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);
     /* 내 조(위쪽 '나')를 맨 앞에, 다른 조는 접어 둠 */
     const me=RO?meId():"",myG=me?(rows.find(a=>a.member_id===me)||{}).grp:undefined;S.grpOpen=S.grpOpen||new Set();
     if(myG!==undefined)grps=[myG,...grps.filter(g=>g!==myG)];
     const gk=g=>`${S.date}:${s}:${g}`,others=grps.filter(g=>g!==myG),allOpen=others.every(g=>S.grpOpen.has(gk(g)));
-    h+=`<div class="slot ${skip?"skip":""}"><div class="slot-h"><b>${s}타임${slotTime(s)?` <small class="st">${slotTime(s)}~</small>`:""}</b>${myG!==undefined&&others.length?`<button type="button" class="linkbtn" data-gall="${s}">${allOpen?"다른 조 접기":"다른 조 펼치기"}</button>`:""}${saved&&!RO?`<label class="chk"><input type="checkbox" data-skip="${s}" ${skip?"checked":""}> 이 타임 안 함</label>`:""}</div><div class="groups">`;
+    h+=`<div class="slot ${skip?"skip":""}"><div class="slot-h"><b>${s}타임${slotTime(s)?` <small class="st">${slotTime(s)}~</small>`:""}</b>${myG!==undefined&&others.length?`<button type="button" class="linkbtn" data-gall="${s}">${allOpen?"다른 조 접기":"다른 조 펼치기"}</button>`:""}${saved&&FX?`<label class="chk"><input type="checkbox" data-skip="${s}" ${skip?"checked":""}> 이 타임 안 함</label>`:""}</div><div class="groups">`;
     for(const g of grps){const gr=rows.filter(a=>a.grp===g).sort((a,b)=>a.ord-b.ord);const gm=grpMembers(gr);
       const mine=g===myG,folded=myG!==undefined&&!mine&&!S.grpOpen.has(gk(g)),gc=`--gc:${GCOL[(g-1)%GCOL.length]}`;
       if(folded){h+=`<button type="button" class="grp folded" style="${gc}" data-gt="${gk(g)}" aria-expanded="false"><span class="gno">${g}조</span><span class="gnames">${gm.map(m=>esc((mem(m)||{}).name||"?")).join(" · ")}</span><span class="gtog">펼치기 ▾</span></button>`;continue}
       h+=`<div class="grp ${mine?"mine":""}" style="${gc}"><div class="grp-h"><span class="gno">${g}조</span>${mine?`<span class="mytag">내 조</span>`:""}<span class="gsub">${gm.length}명 · 형마다 1인 1문제 + 피드백 ${gm.length-1}번</span>${myG!==undefined&&!mine?`<button type="button" class="gtog" data-gt="${gk(g)}" aria-expanded="true">접기 ▴</button>`:""}</div>`;
-      h+=RO?`<div class="gmem">${gm.map(m=>esc((mem(m)||{}).name||"?")).join(" · ")}</div>`
+      h+=!FX?`<div class="gmem">${gm.map(m=>esc((mem(m)||{}).name||"?")).join(" · ")}</div>`
         :`<div class="gmem">${gm.map(m=>`<select data-gm="${s}|${m}" aria-label="${s}타임 ${g}조 사람">${mOpts(m,s)}</select>`).join("")}</div>`;
       for(const R of roundsOf(gr)){const t=R.t;h+=`<div class="trow" style="${tStyle(t)}">${R.n}. ${t}형</div>`;
         for(const a of R.rows){const i=S.draft.indexOf(a);
-          h+=`<div class="arow"><i></i><span class="atxt">${esc((mem(a.member_id)||{}).name||"?")}</span>`+(RO?`<span class="atxt">${pbadge(prob(a.problem_id))}</span>`:`<select data-ap="${i}" aria-label="${esc((mem(a.member_id)||{}).name||"")} ${t}형 문제">${pOpts(t,a.problem_id,a.slot)}</select>`);
+          h+=`<div class="arow"><i></i><span class="atxt">${esc((mem(a.member_id)||{}).name||"?")}</span>`+(!FX?`<span class="atxt">${pbadge(prob(a.problem_id))}</span>`:`<select data-ap="${i}" aria-label="${esc((mem(a.member_id)||{}).name||"")} ${t}형 문제">${pOpts(t,a.problem_id,a.slot)}</select>`);
           {const pr=prob(a.problem_id),cs=caseFor(a,S.date),sk=skillFor(a,S.date);if(pr&&pr.related)h+=`<div class="rel">${cs?`<b class="today-case">오늘 ${esc(cs)}${sk?` → ${esc(sk)}`:""}</b> · `:""}${esc(relShort(pr.related))}</div>`}
-          if(saved&&day)h+=fbThread({day:day.id,slot:a.slot,member:a.member_id,problem:a.problem_id},`${(mem(a.member_id)||{}).name||""} · ${pcode(prob(a.problem_id))} 피드백`);
+          if(saved&&day&&RO)h+=fbThread({day:day.id,slot:a.slot,member:a.member_id,problem:a.problem_id},`${(mem(a.member_id)||{}).name||""} · ${pcode(prob(a.problem_id))} 피드백`);
           h+=`</div>`}}
       h+=`</div>`}
     h+=`</div></div>`}
   if(RO&&skipNote(day))h+=skipNote(day);
-  if(S.savedId&&!RO)h+=`<div style="display:flex;justify-content:flex-end"><button class="btn sm ghost" type="button" id="delDay">이 날 기록 지우기</button></div>`;
-  if(!saved)h+=`<div class="hint">사람·문제를 직접 바꿀 수 있어요. 조 위쪽에서 사람을 바꾸면 그 타임 안에서 두 사람 자리가 통째로 바뀌어요. 저장해야 피드백 칸이 열려요.</div>`;
+  if(FX)h+=`<div class="hint">조 위쪽에서 사람을 바꾸면 그 타임 안에서 두 사람 자리가 통째로 바뀌어요.</div>`+(S.savedId?`<div style="display:flex;justify-content:flex-end"><button class="btn sm ghost" type="button" id="delDay">이 날 기록 지우기</button></div>`:"");
+  else if(!RO&&saved)h+=`<div class="hint">피드백은 '오늘 연습' 탭(조원 화면)에서 써요.</div>`;
   el.innerHTML=h;
   el.querySelectorAll("[data-gt]").forEach(b=>b.onclick=()=>{const k=b.dataset.gt;S.grpOpen.has(k)?S.grpOpen.delete(k):S.grpOpen.add(k);renderResult()});
   el.querySelectorAll("[data-gall]").forEach(b=>b.onclick=()=>{const s=Number(b.dataset.gall),rows=S.draft.filter(a=>a.slot===s),me=meId(),myG=(rows.find(a=>a.member_id===me)||{}).grp;
     const os=[...new Set(rows.map(a=>a.grp))].filter(g=>g!==myG).map(g=>`${S.date}:${s}:${g}`);const all=os.every(k=>S.grpOpen.has(k));os.forEach(k=>all?S.grpOpen.delete(k):S.grpOpen.add(k));renderResult()});
   el.querySelectorAll("[data-vs]").forEach(b=>b.onclick=()=>{const v=Number(b.dataset.vs);if(!v)return;S.vslot=v;S.fbOpen=null;renderResult()});
-  const as=$("addSlot");if(as)as.onclick=addSlot;const rs=$("reSlot");if(rs)rs.onclick=()=>reSlot(S.vslot);
-  const ds=$("delSlot");if(ds)ds.onclick=()=>{const v=S.vslot;if(!confirm(`${v}타임을 뺄까요?`))return;S.draft=S.draft.filter(a=>a.slot!==v);S.slots=Math.max(...S.draft.map(a=>a.slot));delete S.sizes[v];delete S.cfg[v];S.vslot=S.slots;S.dirty=true;renderToday()};
+  const rs=$("reSlot");if(rs)rs.onclick=()=>reSlot(S.vslot);const fb=$("fixBtn");if(fb)fb.onclick=()=>{S.fix=!S.fix;renderResult()};
   el.querySelectorAll("[data-gm]").forEach(sel=>sel.onchange=()=>{const [s,old]=sel.dataset.gm.split("|"),nv=sel.value,slot=Number(s);
     S.draft.filter(a=>a.slot===slot).forEach(a=>{if(a.member_id===old)a.member_id="__tmp";else if(a.member_id===nv)a.member_id=old});
     S.draft.filter(a=>a.member_id==="__tmp").forEach(a=>a.member_id=nv);markDirty();renderResult()});
@@ -945,11 +963,17 @@ function renderResult(){
 
   el.querySelectorAll("[data-skip]").forEach(c=>c.onchange=async()=>{try{await api.skip(day.id,Number(c.dataset.skip),c.checked);day.skipped=c.checked?[...new Set([...(day.skipped||[]),Number(c.dataset.skip)])]:(day.skipped||[]).filter(x=>x!==Number(c.dataset.skip));renderResult();toast(c.checked?"이 타임은 기록에서 빠져요":"다시 기록에 넣었어요")}catch(e){toast(errText(e))}});
   const dd=$("delDay");if(dd)dd.onclick=async()=>{if(!confirm(`${md(S.date)} 조 편성과 피드백을 지울까요?`))return;try{await api.delDay(S.savedId);await reload();loadDate(S.date);toast("지웠어요")}catch(e){toast(errText(e))}}}
-function addSlot(){if(S.present.size<2){toast("나오는 사람을 2명 이상 골라 주세요.");return}
+/* 타임 수 바꾸기: 짠 뒤면 늘린 타임만 새로 짜고(앞 타임 그대로), 줄이면 뒤 타임을 뺌 */
+function setSlots(n){const cur=S.draft&&S.draft.length?Math.max(...S.draft.map(a=>a.slot)):0;
+  if(!cur){S.slots=n;markDirty();renderToday();return}
+  if(n===cur)return;
+  if(n<cur){if(!confirm(`${n+1}${cur>n+1?`~${cur}`:""}타임을 뺄까요?`))return;S.draft=S.draft.filter(a=>a.slot<=n);for(let x=n+1;x<=cur;x++){delete S.sizes[x];delete S.cfg[x];delete S.absent[x]}S.slots=n;S.vslot=Math.min(S.vslot||1,n);S.dirty=true;renderToday();return}
+  for(let x=cur+1;x<=n;x++)addSlot(true);renderToday();toast(`${cur+1}${n>cur+1?`~${n}`:""}타임을 짰어요 (앞 타임은 그대로)`)}
+function addSlot(quiet){if(S.present.size<2){toast("나오는 사람을 2명 이상 골라 주세요.");return}
   const n=Math.max(0,...(S.draft||[]).map(a=>a.slot))+1;if(n>6){toast("타임은 6개까지예요");return}
   for(const id of S.draft.map(a=>a.member_id))if(!S.present.has(id)){toast("나오는 사람 목록이 바뀌었어요 · 전체 다시 짜기를 써 주세요");return}
   S.slots=n;S.sizes[n]=S.sizes[n]??autoSizes(nIn(n)).join(",");
-  cfgOf(n);fillSlotSet(n,true);S.draft=generate(n);S.setSlot=n;S.vslot=n;S.dirty=true;renderToday();toast(`${n}타임을 짰어요 (앞 타임은 그대로) · 자동 저장돼요`)}
+  cfgOf(n);fillSlotSet(n,true);S.draft=generate(n);S.setSlot=n;S.vslot=n;S.dirty=true;if(!quiet){renderToday();toast(`${n}타임을 짰어요 (앞 타임은 그대로) · 자동 저장돼요`)}}
 function reSlot(v){if(nIn(v)<2){toast(`${v}타임에 나오는 사람을 2명 이상 골라 주세요.`);return}const sum=sizeArr(v).reduce((a,b)=>a+b,0);if(sum!==nIn(v)){toast(`${v}타임 조 인원 합(${sum})이 그 타임 나오는 사람 수(${nIn(v)})와 달라요.`);return}
   if(S.savedId&&!confirm(`${v}타임만 새로 짤까요? (다른 타임은 그대로)`))return;
   fillSlotSet(v,true);S.draft=generate(v);S.vslot=v;S.dirty=true;renderToday();toast(`${v}타임만 다시 짰어요 · 자동 저장돼요`)}
@@ -980,7 +1004,7 @@ async function saveDay(auto){clearTimeout(S.autoT);if(S.saving||!S.draft||!S.dra
   try{const D=await api.saveDay(date,slots,unionSet(),S.draft.map(a=>({slot:a.slot,grp:a.grp,ord:a.ord,member_id:a.member_id,problem_id:a.problem_id})),cfgForSave(slots));S.saving=false;S.D=D;normD();
     if(S.date!==date||autoSig()!==sig){/* 저장하는 사이에 또 바뀜 → 화면은 그대로 두고 다시 저장 */const d=dayOf(date);if(S.date===date&&d){S.savedId=d.id;S.dirty=true}renderStatus();return}
     loadDate(S.date);if(keepV){S.vslot=keepV;renderResult()}
-    if(auto!==true||first)toast(first?"저장했어요 · 피드백 칸이 열렸어요":"저장했어요")}
+    if(auto!==true||first)toast(first?"저장했어요 · 조원들은 링크에서 바로 피드백 쓸 수 있어요":"저장했어요")}
   catch(e){S.saving=false;S.autoErr=errText(e);S.autoFail=sig;renderStatus();if(auto!==true)toast(errText(e))}}
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden"&&S.autoT&&(S.dirty||!S.savedId)&&S.draft&&S.draft.length)saveDay(true)});
 /* 공유용: 화면에 보이는 편성(저장 전이어도) 기준 */
