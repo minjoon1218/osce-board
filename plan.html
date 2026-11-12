@@ -813,16 +813,15 @@ function deriveRsets(d,s,rounds){const n=rounds.length,out=rounds.map(()=>[]);co
   [...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b).forEach((g,gi)=>{roundsOf(rows.filter(a=>a.grp===g)).forEach((R,r)=>{const bi=(r+gi)%n;if(out[bi])R.rows.forEach(a=>{if(!out[bi].includes(a.problem_id))out[bi].push(a.problem_id)})})});
   return out.every((x,i)=>x.every(id=>(prob(id)||{}).type===rounds[i]))?out:undefined}
 function loadDate(date){
-  if(date!==S.date){S.vslot=1;S.autoErr="";S.autoFail=""}S.date=date;S.open=null;const d=dayOf(date);
-  S.setSlot=1;
+  const newDate=date!==S.date;if(newDate){S.vslot=1;S.setSlot=1;S.szOpen={};S.autoErr="";S.autoFail=""}S.date=date;S.open=null;const d=dayOf(date);
   if(d){S.savedId=d.id;S.slots=d.slots;S.setIds=d.problem_set.slice();S.draft=d.assigns.map(a=>({...a}));S.dirty=false;
     S.cfg={};const dc=d.cfg||{};for(let s=1;s<=d.slots;s++){if(dc[s]&&Array.isArray(dc[s].rounds))S.cfg[s]={rounds:dc[s].rounds.slice(),rsets:Array.isArray(dc[s].rsets)?dc[s].rsets.map(x=>x.slice()):deriveRsets(d,s,dc[s].rounds),set:(dc[s].set||d.problem_set).slice(),manual:!!dc[s].manual};
       else{const g1=d.assigns.filter(a=>a.slot===s);const gs=[...new Set(g1.map(a=>a.grp))].sort((a,b)=>a-b);const r=roundsOf(g1.filter(a=>a.grp===gs[0])).map(R=>R.t);S.cfg[s]={rounds:r.length?r:TYPES(),rsets:r.length?deriveRsets(d,s,r):undefined,set:d.problem_set.slice()}}}
-    S.present=new Set(d.assigns.map(a=>a.member_id));S.sizes={};S.absent={};S.szOpen={};
-    for(let s=1;s<=d.slots;s++){const ids=new Set(d.assigns.filter(a=>a.slot===s).map(a=>a.member_id));S.absent[s]=new Set([...S.present].filter(id=>!ids.has(id)));if(S.absent[s].size)S.szOpen[s]=true}
+    S.present=new Set(d.assigns.map(a=>a.member_id));S.sizes={};S.absent={};
+    for(let s=1;s<=d.slots;s++){const ids=new Set(d.assigns.filter(a=>a.slot===s).map(a=>a.member_id));S.absent[s]=new Set([...S.present].filter(id=>!ids.has(id)));if(newDate&&S.absent[s].size)S.szOpen[s]=true}
     for(let s=1;s<=d.slots;s++){const rows=d.assigns.filter(a=>a.slot===s);const grps=[...new Set(rows.map(a=>a.grp))].sort((a,b)=>a-b);S.sizes[s]=grps.map(g=>grpMembers(rows.filter(a=>a.grp===g)).length).join(",")}}
   else if(S.role==="member"){S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set();S.absent={};S.setIds=[];S.cfg={}}
-  else{S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set(activeMembers().map(m=>m.id));S.absent={};S.szOpen={};S.slots=S.slots||2;S.sizes={};
+  else{S.savedId=null;S.draft=null;S.dirty=false;S.present=new Set(activeMembers().map(m=>m.id));S.absent={};S.slots=S.slots||2;S.sizes={};
     S.cfg={};for(let s=1;s<=S.slots;s++)S.cfg[s]={rounds:TYPES(),rsets:TYPES().map(()=>[]),set:[]};autoAllSets()}
   renderToday();loadBookings()}
 async function loadBookings(){const el=$("bkList");el.innerHTML="";const list=await api.bookings(S.date,S.D.teams||[]);
@@ -830,7 +829,7 @@ async function loadBookings(){const el=$("bkList");el.innerHTML="";const list=aw
   /* 예약 시간대(겹치면 하나로) = 1타임, 2타임 … 순서 */
   const bl=[];list.slice().sort((a,b)=>a.start_min-b.start_min).forEach(b=>{const l=bl[bl.length-1];if(l&&b.start_min<l.e)l.e=Math.max(l.e,b.end_min);else bl.push({s:b.start_min,e:b.end_min})});
   S.blocks=bl;
-  if(S.autoSlotDone!==S.date){S.autoSlotDone=S.date;const v=nowSlot();if(v&&v!==S.vslot&&S.draft&&S.draft.some(a=>a.slot===v)){S.vslot=v;renderResult()}else renderResult()}else renderResult();
+  if(S.autoSlotDone!==S.date&&!S.edit){S.autoSlotDone=S.date;const v=nowSlot();if(v&&v!==S.vslot&&S.draft&&S.draft.some(a=>a.slot===v)){S.vslot=v;renderResult()}else renderResult()}else renderResult();
   el.innerHTML=list.length?`<span>이 날 우리 예약</span>`+list.map(b=>`<span><b>${fmt(b.start_min)}–${fmt(b.end_min)}</b> ${b.room}번 방${(S.D.teams||[]).length>1?` · ${esc(b.team)}조`:""}</span>`).join(""):(LIVE?`<span>이 날 우리 조 예약이 아직 없어요.</span>`:"")}
 /* 오늘이면 지금 시간이 들어 있는 예약 시간대의 타임 (시작 30분 전부터 그 타임) */
 function nowSlot(){if(S.date!==ymd()||!(S.blocks||[]).length)return 0;const d=new Date(),n=d.getHours()*60+d.getMinutes();let k=0;
@@ -864,7 +863,7 @@ function renderSet(){
     $("setRows").innerHTML=sum+`<button type="button" class="btn sm" data-sopen>✏️ 순서·문제 고치기</button>`;
     $("setRows").querySelector("[data-sopen]").onclick=()=>{S.setOpen=true;renderSet()};
     $("genBtn").textContent=S.draft?"🎲 다시 짜기":"🎲 조 · 문제 짜기";return}
-  h+=c.manual?`<div class="setmode man">✋ 직접 고친 세트 · 다시 짜도 이 문제 그대로 <button type="button" class="btn sm" data-unman>자동으로 되돌리기</button></div>`
+  h+=c.manual?`<div class="setmode man">✋ 직접 고친 세트 · 다시 짜도 이 문제 그대로${S.draft&&S.draft.some(x=>x.slot===ss)?`<button type="button" class="btn sm primary" data-reuse>🎲 이 세트로 ${ss}타임 다시 짜기</button>`:""}<button type="button" class="btn sm" data-unman>자동으로 되돌리기</button></div>`
     :"";
   h+=`<div class="rounds"><span class="rl">진행 순서</span>${c.rounds.map((t,k)=>`<span class="rchip" style="${tStyle(t)}"><b>${k+1}</b><select data-rt="${k}" aria-label="${k+1}번째 형">${allT.map(x=>`<option ${x===t?"selected":""}>${x}</option>`).join("")}</select></span>`).join(`<span class="rarr">→</span>`)}
     ${c.rounds.length>1?`<button type="button" class="btn sm ghost" data-rx="${c.rounds.length-1}" aria-label="마지막 빼기">−</button>`:""}${c.rounds.length<6?`<button type="button" class="btn sm ghost" data-radd aria-label="하나 더">+</button>`:""}
@@ -880,8 +879,9 @@ function renderSet(){
   h+=`<button type="button" class="btn sm" data-sclose>✓ 다 고침</button>`;
   const el=$("setRows");el.innerHTML=h;el.querySelector("[data-sclose]").onclick=()=>{S.setOpen=false;renderSet()};
   const chg=()=>{markDirty();renderSet()};
+  const ru=el.querySelector("[data-reuse]");if(ru)ru.onclick=()=>reSlot(ss);
   const um=el.querySelector("[data-unman]");if(um)um.onclick=()=>{c.manual=false;fillSlotSet(ss,true);toast(`${ss}타임 문제를 자동으로 다시 골랐어요`);chg()};
-  el.querySelectorAll("[data-ss]").forEach(b=>b.onclick=()=>{S.setSlot=Number(b.dataset.ss);renderSet()});
+  el.querySelectorAll("[data-ss]").forEach(b=>b.onclick=()=>{S.setSlot=Number(b.dataset.ss);if(S.draft&&S.draft.some(a=>a.slot===S.setSlot)){S.vslot=S.setSlot;renderResult()}renderSet()});
   el.querySelectorAll("[data-rt]").forEach(x=>x.onchange=()=>{const i=Number(x.dataset.rt);c.rounds[i]=x.value;c.rsets[i]=[];fillSlotSet(ss);chg()});
   el.querySelectorAll("[data-rx]").forEach(b=>b.onclick=()=>{const i=Number(b.dataset.rx);c.rounds.splice(i,1);c.rsets.splice(i,1);normCfg(c);chg()});
   const ra=el.querySelector("[data-radd]");if(ra)ra.onclick=()=>{c.rounds.push(c.rounds[c.rounds.length-1]||allT[0]);c.rsets.push([]);fillSlotSet(ss);chg()};
@@ -952,7 +952,7 @@ function renderResult(){
   el.querySelectorAll("[data-gt]").forEach(b=>b.onclick=()=>{const k=b.dataset.gt;S.grpOpen.has(k)?S.grpOpen.delete(k):S.grpOpen.add(k);renderResult()});
   el.querySelectorAll("[data-gall]").forEach(b=>b.onclick=()=>{const s=Number(b.dataset.gall),rows=S.draft.filter(a=>a.slot===s),me=meId(),myG=(rows.find(a=>a.member_id===me)||{}).grp;
     const os=[...new Set(rows.map(a=>a.grp))].filter(g=>g!==myG).map(g=>`${S.date}:${s}:${g}`);const all=os.every(k=>S.grpOpen.has(k));os.forEach(k=>all?S.grpOpen.delete(k):S.grpOpen.add(k));renderResult()});
-  el.querySelectorAll("[data-vs]").forEach(b=>b.onclick=()=>{const v=Number(b.dataset.vs);if(!v)return;S.vslot=v;S.fbOpen=null;renderResult()});
+  el.querySelectorAll("[data-vs]").forEach(b=>b.onclick=()=>{const v=Number(b.dataset.vs);if(!v)return;S.vslot=v;S.fbOpen=null;if(S.edit&&v<=S.slots){S.setSlot=v;renderSet()}renderResult()});
   const rs=$("reSlot");if(rs)rs.onclick=()=>reSlot(S.vslot);const fb=$("fixBtn");if(fb)fb.onclick=()=>{S.fix=!S.fix;renderResult()};
   el.querySelectorAll("[data-gm]").forEach(sel=>sel.onchange=()=>{const [s,old]=sel.dataset.gm.split("|"),nv=sel.value,slot=Number(s);
     S.draft.filter(a=>a.slot===slot).forEach(a=>{if(a.member_id===old)a.member_id="__tmp";else if(a.member_id===nv)a.member_id=old});
@@ -979,7 +979,7 @@ function reSlot(v){if(nIn(v)<2){toast(`${v}타임에 나오는 사람을 2명 �
   fillSlotSet(v,true);S.draft=generate(v);S.vslot=v;S.dirty=true;renderToday();toast(`${v}타임만 다시 짰어요 · 자동 저장돼요`)}
 {let sx=0,sy=0;const r=document.getElementById("result");if(r){r.addEventListener("touchstart",e=>{const t=e.touches[0];sx=t.clientX;sy=t.clientY},{passive:true});
   r.addEventListener("touchend",e=>{if(e.target.closest("select,textarea,input"))return;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)<70||Math.abs(dy)>Math.abs(dx)*.6)return;
-    const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort((a,b)=>a-b),ix=slots.indexOf(S.vslot),nx=slots[ix+(dx<0?1:-1)];if(nx){S.vslot=nx;S.fbOpen=null;renderResult()}},{passive:true})}}
+    const slots=[...new Set((S.draft||[]).map(a=>a.slot))].sort((a,b)=>a-b),ix=slots.indexOf(S.vslot),nx=slots[ix+(dx<0?1:-1)];if(nx){S.vslot=nx;S.fbOpen=null;if(S.edit&&nx<=S.slots){S.setSlot=nx;renderSet()}renderResult()}},{passive:true})}}
 const GCOL=["#2563eb","#e8590c","#7c3aed","#0d9488","#db2777","#65a30d"];
 const skipNote=d=>d&&(d.skipped||[]).length?`<div class="hint">${d.skipped.join("·")}타임은 '안 함'으로 표시돼 기록에서 빠져요.</div>`:"";
 function validate(){if(S.present.size<2)return "나오는 사람을 2명 이상 골라 주세요.";
