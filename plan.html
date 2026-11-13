@@ -687,9 +687,16 @@ const cfgForSave=n=>{const o={};for(let s=1;s<=n;s++)o[s]=cpCfg(cfgOf(s));return
    라운드마다 k문제(= 그 타임 가장 큰 조 인원, 최소 3 · 질환 수가 모자라면 나눠서).
    점수 낮은 순: ① 오늘 다른 타임/같은 타임 다른 라운드에 이미 있음(크게) ② 그 타임 나오는 사람들이 많이 풀어 봄·피드백 해 봄
    ③ 전날 세트에 있었음 ④ 약간의 랜덤.  조장이 직접 고친 타임(manual)은 그대로 두고, 다른 타임이 그걸 피해서 고름. */
+/* 사람 기준 겹침: 그 형에서 '가장 덜 해 본 문제'보다 몇 번 더 했나(0 = 아직 안 해 봤거나 한 바퀴 다 돈 상태) + 며칠 전에 했나 */
+const OD=new Map();
+function overDone(T,m,id){const p=prob(id);if(!p)return 0;const k=m+"|"+p.type;let mn=OD.get(k);
+  if(mn===undefined||OD.T!==T){if(OD.T!==T){OD.clear();OD.T=T}mn=Math.min(...activeProblems().filter(x=>x.type===p.type).map(x=>g2(T.solve,m,x.id)));OD.set(k,mn)}
+  return g2(T.solve,m,id)-mn}
+function gapDays(T,m,id){const l=(T.last[m]||{})[id];return l?Math.round((new Date(S.date)-new Date(l))/864e5):99}
+const recentPen=g=>g<=1?50:g<=2?25:g<=3?10:0;
 function useToday(id,s,ri){let n=0;for(let x=1;x<=S.slots;x++){const c=S.cfg[x];if(!c||!c.rsets)continue;c.rsets.forEach((r,j)=>{if((x!==s||j!==ri)&&r.includes(id))n++})}return n}
 function probScore(id,s,ri,T,recent){const ms=presentIn(s);
-  return useToday(id,s,ri)*1000+ms.reduce((a,m)=>a+g2(T.solve,m,id)*2+g2(T.fb,m,id),0)+(recent.has(id)?ms.length*3:0)+Math.random()*1.5}
+  return useToday(id,s,ri)*1000+ms.reduce((a,m)=>a+overDone(T,m,id)*6+recentPen(gapDays(T,m,id))/10+g2(T.fb,m,id)*.3,0)+(recent.has(id)?ms.length:0)+Math.random()*1.5}
 function pickRound(s,ri,k,T,recent){const t=cfgOf(s).rounds[ri];
   return activeProblems().filter(p=>p.type===t).map(p=>({id:p.id,v:probScore(p.id,s,ri,T,recent)})).sort((a,b)=>a.v-b.v).slice(0,k).map(x=>x.id)}
 function roundK(s,ri){const c=cfgOf(s),t=c.rounds[ri],K=Math.max(3,slotMax(s)),cnt=c.rounds.filter(x=>x===t).length,avail=activeProblems().filter(p=>p.type===t).length;
@@ -747,7 +754,7 @@ function generate(only){
         const set=rsetOf(s,ri);let pool=set.slice();while(pool.length<g.length)pool=pool.concat(set);
         let bestA=null;
         for(const sub of combos(pool,g.length))for(const pm of perms(sub)){let c=0;
-          g.forEach((m,k)=>{const p=pm[k];c+=((tSolved[m]||new Set()).has(p)?1000:0)+g2(T.solve,m,p)*10+g2(T.fb,m,p)*2+((tSeen[m]||{})[p]||0)+Math.random()*.6});
+          g.forEach((m,k)=>{const p=pm[k];c+=((tSolved[m]||new Set()).has(p)?1000:0)+overDone(T,m,p)*80+recentPen(gapDays(T,m,p))+g2(T.fb,m,p)+((tSeen[m]||{})[p]||0)*2+Math.random()*.6});
           if(!bestA||c<bestA.c)bestA={c,pm}}
         g.forEach((m,k)=>{const p=bestA.pm[k];out.push({slot:s,grp:gi+1,ord:ti*10+k+1,member_id:m,problem_id:p});(tSolved[m]=tSolved[m]||new Set()).add(p);
           for(const o of g)if(o!==m){(tSeen[o]=tSeen[o]||{});tSeen[o][p]=(tSeen[o][p]||0)+1}})});
