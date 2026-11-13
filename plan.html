@@ -337,6 +337,13 @@ body.member #tab-setup{grid-template-columns:minmax(0,1fr)}
 .sess .fbt{grid-column:auto}
 .me{display:inline-flex;align-items:center;gap:5px;font-size:.84rem;color:var(--muted)}
 .me select{width:auto;padding:4px 8px;min-height:32px}
+.rcw{display:flex;flex-wrap:wrap;gap:4px;align-items:center;grid-column:1/-1;margin:-2px 0 6px}
+.rcw .hint{font-size:.72rem}
+.rc{font-size:.76rem;font-weight:700;border:1px solid var(--line-strong);border-radius:99px;padding:2px 9px;background:var(--surface);color:var(--muted)}
+.rc small{font-weight:600;color:var(--faint)}
+.rc:hover{border-color:var(--accent);color:var(--fg)}
+.rc.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.rc.on small{color:#fff;opacity:.85}
 .mem-only{display:none}
 body.member .mem-only{display:block}
 body.member #probList input[readonly]{background:var(--sunk);color:var(--muted);border-color:transparent}
@@ -600,18 +607,20 @@ const plabel=p=>p?`${pcode(p)} ${p.name}`.trim():"(지운 질환)";
 const pbadge=p=>p?`<span class="tbadge" style="${tStyle(p.type)}">${esc(pcode(p))}</span>${esc(p.name)}`:"(지운 질환)";
 const dayOf=date=>S.D.days.find(d=>d.date===date);
 /* 관련 초진 케이스: 저장은 '#번호 제목' 한 줄씩, 화면엔 번호만 (설정 탭에서만 전체) */
-const relShort=t=>{const g={},other=[];String(t||"").split(/\n|\s·\s/).map(x=>x.trim()).filter(Boolean).forEach(x=>{const m=x.match(/^(초진|두근두근)\s*#?(\d+)/);
-  if(m){(g[m[1]]=g[m[1]]||[]).push(m[2]+(/감별/.test(x)?"(감별)":""))}else{const h=x.match(/^#\s?(\d+)/);other.push(h?`#${h[1]}`:x.replace(/\s*\(.*\)\s*$/,""))}});
+const relShort=t=>{const g={},other=[];String(t||"").split(/\n|\s·\s/).map(x=>x.trim()).filter(Boolean).forEach(x=>{const star=/^★/.test(x);x=x.replace(/^★\s*/,"");const m=x.match(/^(초진|두근두근)\s*#?(\d+)/);
+  if(m){(g[m[1]]=g[m[1]]||[]).push(m[2]+(star?"★":"")+(/감별/.test(x)?"(감별)":""))}else{const h=x.match(/^#\s?(\d+)/);other.push(h?`#${h[1]}`:x.replace(/\s*\(.*\)\s*$/,""))}});
   return [...["초진","두근두근"].filter(k=>g[k]).map(k=>`${k} ${[...new Set(g[k])].join("·")}`),...other].join(" / ")};
 /* 관련 케이스 중 하나를 고정 무작위로 (같은 날·사람·문제면 늘 같은 번호) — 감별 케이스는 뺌 */
 /* 관련 케이스 한 줄 → {c:"초진 8", tooth:"#46"} (치식은 케이스 이름 뒤 첫 #번호) */
-const relItems=t=>{const out=[],seen=new Set();String(t||"").split(/\n|\s·\s/).map(x=>x.trim()).filter(x=>x&&!/감별/.test(x)).forEach(x=>{const m=x.match(/^(초진|두근두근)\s*#?(\d+)(.*)$/);if(!m)return;const c=`${m[1]} ${m[2]}`;if(seen.has(c))return;seen.add(c);
-  const tm=m[3].match(/#([1-4][1-8]|[5-8][1-5])(?!\d)/);out.push({c,tooth:tm?"#"+tm[1]:""})});return out};
+/* 줄 앞에 ★ = 대표 케이스 → 그 질환은 늘 이 케이스로 */
+const relItems=t=>{const out=[],seen=new Set();String(t||"").split(/\n|\s·\s/).map(x=>x.trim()).filter(x=>x&&!/감별/.test(x)).forEach(x=>{const star=/^★/.test(x);x=x.replace(/^★\s*/,"");const m=x.match(/^(초진|두근두근)\s*#?(\d+)(.*)$/);if(!m)return;const c=`${m[1]} ${m[2]}`;if(seen.has(c))return;seen.add(c);
+  const tm=m[3].match(/#([1-4][1-8]|[5-8][1-5])(?!\d)/);out.push({c,tooth:tm?"#"+tm[1]:"",rep:star})});return out};
+const repCase=p=>{const r=p?relItems(p.related).find(x=>x.rep):null;return r?r.c:""};
 const relCases=t=>relItems(t).map(x=>x.c);
 /* C형: 할 술기 + 치식 (질환 이름 = 술기 이름) */
 const skillFor=(a,date,src)=>{const p=prob(a.problem_id);if(!p||p.type!=="C")return "";const c=caseFor(a,date,src);const it=relItems(p.related).find(x=>x.c===c);return `${pkw(p)}${it&&it.tooth?" "+it.tooth:""}`};
 const hashStr=str=>{let h=2166136261;for(const ch of str){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0};
-const caseOrder=(a,date)=>{const p=prob(a.problem_id);const cs=p?relCases(p.related):[];return cs.map(c=>[hashStr(`${date}|${a.slot}|${a.member_id}|${a.problem_id}|${c}`),c]).sort((x,y)=>x[0]-y[0]).map(x=>x[1])};
+const caseOrder=(a,date)=>{const p=prob(a.problem_id);const rc=repCase(p);if(rc)return [rc];const cs=p?relCases(p.related):[];return cs.map(c=>[hashStr(`${date}|${a.slot}|${a.member_id}|${a.problem_id}|${c}`),c]).sort((x,y)=>x[0]-y[0]).map(x=>x[1])};
 /* 같은 조·타임 안에서는 케이스 번호가 겹치지 않게 */
 const caseFor=(a,date,src)=>{const rows=(src||S.draft||[]).filter(x=>x.slot===a.slot&&x.grp===a.grp).sort((x,y)=>x.ord-y.ord);const used=new Set();
   for(const r of rows){const o=caseOrder(r,date);const c=o.find(x=>!used.has(x))||o[0]||"";if(c)used.add(c);if(r===a||(r.member_id===a.member_id&&r.problem_id===a.problem_id))return c}
@@ -947,7 +956,7 @@ function renderResult(){
       for(const R of roundsOf(gr)){const t=R.t;h+=`<div class="trow" style="${tStyle(t)}">${R.n}. ${t}형</div>`;
         for(const a of R.rows){const i=S.draft.indexOf(a);
           h+=`<div class="arow"><i></i><span class="atxt">${esc((mem(a.member_id)||{}).name||"?")}</span>`+(!FX?`<span class="atxt">${pbadge(prob(a.problem_id))}</span>`:`<select data-ap="${i}" aria-label="${esc((mem(a.member_id)||{}).name||"")} ${t}형 문제">${pOpts(t,a.problem_id,a.slot)}</select>`);
-          {const pr=prob(a.problem_id),cs=caseFor(a,S.date),sk=skillFor(a,S.date);if(pr&&pr.related)h+=`<div class="rel">${cs?`<b class="today-case">오늘 ${esc(cs)}${sk?` → ${esc(sk)}`:""}</b> · `:""}${esc(relShort(pr.related))}</div>`}
+          {const pr=prob(a.problem_id),cs=caseFor(a,S.date),sk=skillFor(a,S.date);if(pr&&pr.related)h+=`<div class="rel">${cs?`<b class="today-case">${repCase(pr)?"★ 대표":"오늘"} ${esc(cs)}${sk?` → ${esc(sk)}`:""}</b> · `:""}${esc(relShort(pr.related))}</div>`}
           if(saved&&day&&RO)h+=fbThread({day:day.id,slot:a.slot,member:a.member_id,problem:a.problem_id},`${(mem(a.member_id)||{}).name||""} · ${pcode(prob(a.problem_id))} 피드백`);
           h+=`</div>`}}
       h+=`</div>`}
@@ -1162,13 +1171,21 @@ function renderSetup(){const RM=S.role==="member";
   const types=[...new Set(["A","B","C",...PROB.map(p=>p.type)])];
   $("probMeta").textContent=types.map(t=>`${t} ${PROB.filter(p=>p.type===t).length}`).join(" · ");
   $("probList").innerHTML=types.map(t=>{const list=PROB.map((p,i)=>({p,i})).filter(x=>x.p.type===t).sort((a,b)=>a.p.no-b.p.no);
-    return `<div class="tsec" style="${tStyle(t)}"><h3>${t}형</h3>${list.map(({p,i})=>`<div class="prow"><input type="number" min="1" max="49" data-pn="${i}" value="${p.no}" aria-label="번호" ${RM?"readonly tabindex=-1":""}><input data-pt="${i}" value="${esc(p.name)}" placeholder="질환 이름" aria-label="질환 이름" ${RM?"readonly tabindex=-1":""}>${RM?"<span></span>":`<button class="x" type="button" data-px="${i}" aria-label="지우기">✕</button>`}<textarea class="prel" data-pr="${i}" rows="${Math.max(1,String(p.related||"").split("\n").length)}" placeholder="관련 케이스 (한 줄에 하나: 초진 13 지치주위염 / 두근두근 28 긴장성 두통)" aria-label="관련 초진 케이스">${esc(p.related||"")}</textarea></div>`).join("")}
+    return `<div class="tsec" style="${tStyle(t)}"><h3>${t}형</h3>${list.map(({p,i})=>`<div class="prow"><input type="number" min="1" max="49" data-pn="${i}" value="${p.no}" aria-label="번호" ${RM?"readonly tabindex=-1":""}><input data-pt="${i}" value="${esc(p.name)}" placeholder="질환 이름" aria-label="질환 이름" ${RM?"readonly tabindex=-1":""}>${RM?"<span></span>":`<button class="x" type="button" data-px="${i}" aria-label="지우기">✕</button>`}<textarea class="prel" data-pr="${i}" rows="${Math.max(1,String(p.related||"").split("\n").length)}" placeholder="관련 케이스 (한 줄에 하나: 초진 13 지치주위염 / 두근두근 28 긴장성 두통)" aria-label="관련 초진 케이스">${esc(p.related||"")}</textarea>${relChips(p,i)}</div>`).join("")}
       ${RM?"":`<button class="btn sm" type="button" data-padd="${t}">+ ${t}형 질환</button>`}</div>`}).join("");
   $("probList").querySelectorAll("[data-pn]").forEach(i=>i.oninput=()=>{PROB[Number(i.dataset.pn)].no=Number(i.value)});
   $("probList").querySelectorAll("[data-pt]").forEach(i=>i.oninput=()=>{PROB[Number(i.dataset.pt)].name=i.value});
-  $("probList").querySelectorAll("[data-pr]").forEach(i=>i.oninput=()=>{PROB[Number(i.dataset.pr)].related=i.value});
+  $("probList").querySelectorAll("[data-pr]").forEach(i=>i.oninput=()=>{PROB[Number(i.dataset.pr)].related=i.value;const w=$("probList").querySelector(`[data-rcw="${i.dataset.pr}"]`);if(w)w.outerHTML=relChips(PROB[Number(i.dataset.pr)],Number(i.dataset.pr));bindRc()});
+  bindRc();
   $("probList").querySelectorAll("[data-px]").forEach(b=>b.onclick=()=>{PROB.splice(Number(b.dataset.px),1);renderSetup()});
   $("probList").querySelectorAll("[data-padd]").forEach(b=>b.onclick=()=>{const t=b.dataset.padd;const no=Math.max(0,...PROB.filter(p=>p.type===t).map(p=>p.no))+1;PROB.push({id:null,type:t,no,name:"",active:true});renderSetup();const ins=$("probList").querySelectorAll(`[data-pt]`);ins[ins.length-1]&&[...ins].find(x=>PROB[Number(x.dataset.pt)].type===t&&PROB[Number(x.dataset.pt)].no===no)?.focus()})}
+/* 관련 케이스 칩: 누르면 그 줄 앞에 ★(대표) — 한 질환에 하나. 다시 누르면 해제(무작위로 돌아감) */
+function relChips(p,i){const it=relItems(p.related);if(!it.length)return `<div class="rcw" data-rcw="${i}"></div>`;
+  return `<div class="rcw" data-rcw="${i}"><span class="hint">대표 케이스</span>${it.map(x=>`<button type="button" class="rc ${x.rep?"on":""}" data-rc="${i}" data-rcc="${esc(x.c)}" aria-pressed="${x.rep}">${x.rep?"★ ":""}${esc(x.c)}${x.tooth?` <small>${x.tooth}</small>`:""}</button>`).join("")}<span class="hint">${it.some(x=>x.rep)?"매번 ★ 케이스로":"없으면 매번 무작위"}</span></div>`}
+function bindRc(){$("probList").querySelectorAll("[data-rc]").forEach(b=>b.onclick=()=>{const i=Number(b.dataset.rc),c=b.dataset.rcc,P=PROB[i];const on=b.classList.contains("on");
+  P.related=String(P.related||"").split("\n").map(l=>{const t=l.replace(/^★\s*/,"");const m=t.trim().match(/^(초진|두근두근)\s*#?(\d+)/);return (!on&&m&&`${m[1]} ${m[2]}`===c)?"★ "+t.trim():t}).join("\n");
+  const ta=$("probList").querySelector(`[data-pr="${i}"]`);if(ta)ta.value=P.related;b.closest(".rcw").outerHTML=relChips(P,i);bindRc();
+  $("probMsg").className="msg";$("probMsg").textContent=on?`${c} 대표 해제 · 저장해 주세요`:`${c}를 대표로 · 저장해 주세요`})}
 $("memAdd").onclick=()=>{const v=$("memNew").value.split(/[,\n]/).map(s=>s.trim()).filter(Boolean);if(!v.length)return;v.forEach(n=>MEM.push({id:null,name:n.slice(0,20),active:true}));$("memNew").value="";renderSetup()};
 $("memNew").onkeydown=e=>{if(e.key==="Enter"&&!e.isComposing&&e.keyCode!==229){e.preventDefault();$("memAdd").click()}};
 $("memSave").onclick=async()=>{const m=$("memMsg");const items=MEM.map((x,i)=>({id:x.id,name:String(x.name||"").trim(),active:x.active!==false,sort:i}));
