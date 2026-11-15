@@ -417,7 +417,9 @@ function openTimeFor(date,team=myTeam()){const o=(S.openDates||[]).find(x=>x.dat
   if(o){const at=new Date(o.opens_at);return at<rule?at:rule}return rule}
 /* 오픈 순서 문구: "21:00 1·2일차 → 21:10 3일차 → … → 21:40 나머지" */
 function openOrderText(){const o=S.offsets||{},g={};
-  Object.entries(o).forEach(([d,m])=>{if(Number(d)>0)(g[m]=g[m]||[]).push(Number(d))});
+  /* 신청 막힌 일차(예: 시험 끝난 3일차)는 순서에서 뺌 */
+  const dayClosed=d=>{const t=(S.tiers||[]).find(x=>x.from_day>0&&d>=x.from_day&&d<=x.to_day)||(S.tiers||[]).find(x=>x.from_day===0);return !!(t&&t.closed)};
+  Object.entries(o).forEach(([d,m])=>{if(Number(d)>0&&!dayClosed(Number(d)))(g[m]=g[m]||[]).push(Number(d))});
   const parts=Object.keys(g).map(Number).sort((a,b)=>a-b).map(m=>m<=EARLY?`${g[m].sort((a,b)=>a-b).join("·")}일차 언제든`:`${fmt(ROLLOVER*60+m)} ${g[m].sort((a,b)=>a-b).join("·")}일차`);
   {const d0=(S.tiers||[]).find(x=>x.from_day===0);if(o[0]!=null&&!(d0&&d0.closed))parts.push(`${fmt(ROLLOVER*60+o[0])} 나머지`)}
   const early=parts.filter(x=>x.endsWith("언제든")),rest=parts.filter(x=>!x.endsWith("언제든"));
@@ -431,7 +433,7 @@ function tierOf(day){const t=tiers();return (day!=null&&t.find(x=>x.from_day>0&&
 function tierMin(day){const x=tierOf(day);return x?x.team_min:120}
 /* 신청 막힌 구간(day_tiers.closed)의 조 — 조장 신청 불가, 관리자는 가능 */
 const teamClosed=t=>{const r=ruleOf(t),x=tierOf(r?r.exam_day:null);return !!(x&&x.closed)};
-const closedLabel=()=>tiers().filter(x=>x.closed).map(x=>x.from_day===0?"나머지 조":x.label).join("·");
+const closedLabel=()=>tiers().filter(x=>x.closed).map(x=>x.from_day===0?`${Math.max(0,...tiers().filter(t=>t.from_day>0).map(t=>t.to_day))+1}일차 이후 조`:x.label).join("·");
 function tierText(){const t=tiers().slice().sort((a,b)=>(a.from_day||99)-(b.from_day||99));return t.map(x=>`${x.label} ${x.team_min>=960?"제한 없음":fmtH(x.team_min)}`).join(" · ")}
 function unitCap(u,date){const rs=Object.values(S.rules||{}).filter(r=>(r.unit||r.team)===u);
   if(tiers().length&&rs.some(r=>tierMin(r.exam_day)>=960))return 99999;   /* 16시간 = 제한 없음 */
